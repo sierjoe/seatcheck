@@ -1,6 +1,6 @@
 // Bump this version whenever you upload changed files, so devices get the update.
-const CACHE = 'seatcheck-v2';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './jszip.min.js', './sf2.js', './sf2-template.xlsx'];
+const CACHE = 'seatcheck-v3';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './jszip.min.js', './sf2.js', './sf2-template.xlsx', './qrcode.js', './jsqr.js', './clean.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

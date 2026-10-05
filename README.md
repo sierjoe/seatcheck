@@ -2,7 +2,7 @@
 
 ## 1. Put it online once (free, GitHub Pages)
 1. Sign up at github.com, then tap **+ → New repository**. Name it `seatcheck`, set it to **Public**, create it.
-2. Tap **Add file → Upload files** and upload all the files in the folder (index.html, sw.js, sf2.js, jszip.min.js, sf2-template.xlsx, manifest.webmanifest, and the 3 PNG icons). Commit.
+2. Tap **Add file → Upload files** and upload all the files in the folder (index.html, sw.js, sf2.js, clean.js, jszip.min.js, qrcode.js, jsqr.js, sf2-template.xlsx, manifest.webmanifest, and the 3 PNG icons). Commit.
 3. Go to **Settings → Pages**. Under "Branch", pick **main** and **/(root)**, then Save.
 4. After 1–2 minutes your link is: `https://YOUR-USERNAME.github.io/seatcheck/`
 
