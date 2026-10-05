@@ -25,11 +25,14 @@ const Clean = (() => {
   }
   const taskEntry = (sec, sid, date) => data(sec).log.find(e => e.sid === sid && e.date === date && e.kind === 'task');
 
-  function award(sec, sid, date) {
+  const r2 = v => Math.round(v * 100) / 100;
+  const PCTS = [1, 0.75, 0.5];
+  const pctLabel = p => Math.round(p * 100) + '%';
+  function award(sec, sid, date, pct = 1) {
     if (taskEntry(sec, sid, date)) return { status: 'dup', entry: taskEntry(sec, sid, date) };
     const t = taskOf(sec, sid, date);
     if (!t) return { status: 'none' };
-    const entry = { id: uid(), sid, date, kind: 'task', pts: t.pts, task: t.name, ts: Date.now() };
+    const entry = { id: uid(), sid, date, kind: 'task', pts: r2(t.pts * pct), pct, task: t.name, ts: Date.now() };
     data(sec).log.push(entry);
     return { status: 'ok', entry };
   }
@@ -37,6 +40,17 @@ const Clean = (() => {
     const entry = { id: uid(), sid, date, kind: 'adj', pts, task: pts > 0 ? 'Bonus' : 'Deduction', ts: Date.now() };
     data(sec).log.push(entry);
     return entry;
+  }
+  function setPct(sec, entry, pct) {
+    const t = taskOf(sec, entry.sid, entry.date);
+    const full = t ? t.pts : entry.pts / (entry.pct || 1);
+    entry.pct = pct; entry.pts = r2(full * pct);
+  }
+  async function pickPct(sec, sid, date, title, msg) {
+    const t = taskOf(sec, sid, date);
+    if (!t) { toast('No cleaning task this week. Add them to a group first.'); return null; }
+    return choose(title || nameOf(sec, sid), msg || `${esc(t.name)} on ${esc(prettyDate(date))}. How well was it done?`,
+      PCTS.map(p => ({ label: `${pctLabel(p)}: ${r2(t.pts * p)} pts`, value: p, cls: 'span' + (p === 1 ? ' primary' : '') })));
   }
   const removeEntry = (sec, id) => { const cl = data(sec); cl.log = cl.log.filter(e => e.id !== id); };
   const dayPoints = (sec, sid, date) => data(sec).log.filter(e => e.sid === sid && e.date === date).reduce((a, e) => a + e.pts, 0);
@@ -166,13 +180,13 @@ const Clean = (() => {
         }).join('') || '<span class="muted small">No one yet</span>'}</div>
         <div class="task-foot">
           <span class="muted small">${mem.length ? `${done} of ${mem.length} done` : ''}</span>
-          <span>${mem.length && done < mem.length ? `<button class="link" data-act="cl-all" data-t="${task.id}">Give all</button>` : ''}
-          <button class="link" data-act="cl-members" data-t="${task.id}">Members</button></span>
+          <span>${mem.length && done < mem.length ? `<button class="link" data-act="cl-all" data-t="${task.id}">${ic('checks')}Give all</button>` : ''}
+          <button class="link" data-act="cl-members" data-t="${task.id}">${ic('users')}Members</button></span>
         </div>
       </section>`;
     }).join('');
     return `
-      <button class="btn primary wide scanbtn" data-act="cl-scan">Scan QR cards</button>
+      <button class="btn primary wide scanbtn" data-act="cl-scan">${ic('qr')}Scan QR cards</button>
       <div class="datebar" style="margin-top:12px">
         <button class="icon-btn" data-act="cl-wk" data-n="-7" aria-label="Previous week">‹</button>
         <div class="date"><span>Week of ${esc(rangeLabel(st.week))}</span></div>
@@ -183,9 +197,10 @@ const Clean = (() => {
       ${cards}
       ${free.length ? `<p class="muted small"><b>Not in a group:</b> ${free.map(sid => esc(shortName(nameOf(sec, sid)))).join(', ')}</p>` : ''}
       <div class="row wrap">
-        <button class="btn" data-act="cl-shuffle">Shuffle groups</button>
-        <button class="btn" data-act="cl-rotate">Rotate from last week</button>
-        <button class="btn" data-act="cl-copy">Same as last week</button>
+        <button class="btn" data-act="cl-shuffle">${ic('shuffle')}Shuffle groups</button>
+        <button class="btn" data-act="cl-rotate">${ic('rotate')}Rotate from last week</button>
+        <button class="btn" data-act="cl-copy">${ic('copy')}Same as last week</button>
+        <button class="btn" data-act="cl-printgroups">${ic('print')}Print groups</button>
       </div>`;
   }
 
@@ -206,7 +221,7 @@ const Clean = (() => {
         <div class="rec-top"><span>${esc(r.name)}</span><span class="total">${r.total}</span></div>
         <div class="muted small">${r.task ? esc(r.task) + ' this week' : 'No group this week'}${r.days ? `, ${r.days} day${r.days > 1 ? 's' : ''} done` : ''}</div>
       </button></li>`).join('')}</ul>
-      <button class="btn wide" data-act="cl-csv" style="margin-top:14px">Export points to CSV (Excel)</button>`;
+      <button class="btn wide" data-act="cl-csv" style="margin-top:14px">${ic('sheet')}Export points to Excel</button>`;
   }
 
   function tasksView(sec) {
@@ -214,13 +229,13 @@ const Clean = (() => {
     return `
       <ul class="classes">${cl.tasks.map(t => `<li>
         <button class="cls" data-act="cl-edit" data-t="${t.id}"><span>${esc(t.name)}</span>
-        <small>${t.pts} points a day${t.size ? `, groups of ${t.size}` : ''}</small></button>
-        <button class="link" data-act="cl-edit" data-t="${t.id}">Edit</button></li>`).join('')}</ul>
+        <small>${t.pts} points a day (75% = ${r2(t.pts * .75)}, 50% = ${r2(t.pts * .5)})${t.size ? `, groups of ${t.size}` : ''}</small></button>
+        <button class="link" data-act="cl-edit" data-t="${t.id}" aria-label="Edit">${ic('edit')}</button></li>`).join('')}</ul>
       ${cl.tasks.length ? '' : '<p class="muted small">Example: Sweep the floor, 5 points, group of 4.</p>'}
-      <button class="btn wide" data-act="cl-add" style="margin-top:12px">Add a task</button>
+      <button class="btn wide" data-act="cl-add" style="margin-top:12px">${ic('plus')}Add a task</button>
       <h2 class="h">QR cards</h2>
       <p class="muted small">Each student gets one card for the whole year. Print them from your Mac for the best result, then cut along the lines.</p>
-      <button class="btn primary wide" data-act="cl-print">Print QR cards for ${esc(sec.name)}</button>`;
+      <button class="btn primary wide" data-act="cl-print">${ic('print')}Print QR cards for ${esc(sec.name)}</button>`;
   }
 
   /* ---------- actions ---------- */
@@ -233,11 +248,17 @@ const Clean = (() => {
       case 'cl-day': st.day = b.dataset.d; return render_();
       case 'cl-chip': {
         const sid = b.dataset.sid, e = taskEntry(sec, sid, st.day);
-        if (!e) { award(sec, sid, st.day); save(); return render_(); }
+        if (!e) {
+          const p = await pickPct(sec, sid, st.day);
+          if (p !== null) { award(sec, sid, st.day, p); save(); }
+          return render_();
+        }
         const v = await choose(nameOf(sec, sid), `${esc(e.task)} on ${esc(prettyDate(st.day))}: ${dayPoints(sec, sid, st.day)} points so far.`, [
+          { label: 'Change rating (100%, 75%, 50%)', value: 'pct', cls: 'span' },
           { label: 'Add or deduct points', value: 'adj', cls: 'span' },
           { label: 'Remove this day\'s points', value: 'rm', cls: 'span neg' }
         ]);
+        if (v === 'pct') { const p = await pickPct(sec, sid, st.day); if (p !== null) { setPct(sec, e, p); save(); } }
         if (v === 'adj') await adjustFlow(sec, sid, st.day);
         if (v === 'rm') { cl.log = cl.log.filter(x => !(x.sid === sid && x.date === st.day)); save(); }
         return render_();
@@ -288,6 +309,7 @@ const Clean = (() => {
         save(); return render_();
       }
       case 'cl-print': return printCards(sec);
+      case 'cl-printgroups': return printGroups(sec);
       case 'cl-csv': return exportCSV(sec);
       case 'cl-scan': return Scanner.open();
     }
@@ -298,17 +320,22 @@ const Clean = (() => {
   function exportCSV(sec) {
     const cl = data(sec);
     const weeks = [...new Set(cl.log.map(e => mondayOf(e.date)))].sort();
-    const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
-    const lines = [['Student', 'Task points', 'Bonus', 'Deductions', 'Total', ...weeks.map(w => 'Week of ' + w)].map(q).join(',')];
     const ids = roster(sec).concat(Object.keys(sec.students).filter(id => !sec.seats.includes(id) && cl.log.some(e => e.sid === id)));
-    for (const sid of ids) {
+    const summary = [['Student', 'Task points', 'Bonus', 'Deductions', 'Total', 'Days done', ...weeks.map(w => 'Week of ' + shortDate(w))]];
+    const rows = ids.map(sid => {
       const es = cl.log.filter(e => e.sid === sid);
-      const s = f => es.filter(f).reduce((a, e) => a + e.pts, 0);
-      lines.push([nameOf(sec, sid), s(e => e.kind === 'task'), s(e => e.kind === 'adj' && e.pts > 0), s(e => e.kind === 'adj' && e.pts < 0),
-        s(() => true), ...weeks.map(w => s(e => mondayOf(e.date) === w))].map(q).join(','));
-    }
-    const safe = sec.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'class';
-    shareFile(`${safe}-cleaning-points-${todayStr()}.csv`, '﻿' + lines.join('\r\n'), 'text/csv');
+      const s = f => r2(es.filter(f).reduce((a, e) => a + e.pts, 0));
+      return [nameOf(sec, sid), s(e => e.kind === 'task'), s(e => e.kind === 'adj' && e.pts > 0), s(e => e.kind === 'adj' && e.pts < 0),
+        s(() => true), es.filter(e => e.kind === 'task').length, ...weeks.map(w => s(e => mondayOf(e.date) === w))];
+    }).sort((x, y) => y[4] - x[4] || x[0].localeCompare(y[0]));
+    const log = [['Date', 'Student', 'Task', 'Rating', 'Points']].concat(
+      cl.log.slice().sort((x, y) => x.date.localeCompare(y.date) || x.ts - y.ts)
+        .map(e => [e.date, nameOf(sec, e.sid), e.task, e.kind === 'task' ? pctLabel(e.pct || 1) : (e.pts > 0 ? 'Bonus' : 'Deduction'), e.pts]));
+    const safe = sec.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-') || 'class';
+    XLSX_MINI.make([
+      { name: 'Points', rows: summary.concat(rows), widths: [30, 11, 8, 11, 8, 10, ...weeks.map(() => 13)] },
+      { name: 'Daily log', rows: log, widths: [12, 30, 22, 10, 8] }
+    ]).then(b => shareFile(`${safe}-cleaning-points-${todayStr()}.xlsx`, b, b.type));
   }
 
   /* ---------- QR cards ---------- */
@@ -331,6 +358,19 @@ const Clean = (() => {
     do { g.font = `700 ${fs}px -apple-system, "Helvetica Neue", Arial, sans-serif`; fs -= 1; } while (g.measureText(label).width > bw * 0.9 && fs > 8);
     g.fillText(label, dim / 2, dim / 2 + 1);
     return c;
+  }
+
+  function printGroups(sec) {
+    const cl = data(sec), a = cl.weeks[st.week] || {};
+    if (!cl.tasks.some(t => (a[t.id] || []).length)) return toast('This week has no groups yet');
+    $('#printArea').innerHTML = `<div class="gp">
+      <h1>Cleaning groups</h1>
+      <p>${esc(sec.name)}, week of ${esc(rangeLabel(st.week))}, ${toDate(st.week).getFullYear()}</p>
+      <div class="gp-grid">${cl.tasks.filter(t => (a[t.id] || []).length).map(t => `<section class="gp-box">
+        <h2>${esc(t.name)}<small>${t.pts} pts a day</small></h2>
+        <ol>${a[t.id].slice().sort((x, y) => nameOf(sec, x).localeCompare(nameOf(sec, y))).map(sid => `<li>${esc(nameOf(sec, sid))}</li>`).join('')}</ol>
+      </section>`).join('')}</div></div>`;
+    setTimeout(() => window.print(), 150);
   }
 
   function printCards(sec) {
@@ -361,7 +401,7 @@ const Clean = (() => {
 
     async function open() {
       el('scan').hidden = false; document.body.classList.add('scanning');
-      el('scResult').hidden = true; el('scHint').textContent = 'Point the camera at a QR card';
+      el('scResult').hidden = true; el('scLast').hidden = true; pending = null; el('scHint').textContent = 'Point the camera at a QR card';
       beep(true); // unlocks sound on iPhone (needs a tap first)
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false });
@@ -390,41 +430,57 @@ const Clean = (() => {
       }
       raf = requestAnimationFrame(loop);
     }
+    // scanning pauses while a rating is being picked, then carries on by itself
+    let pending = null;
     function handle(text) {
+      if (pending) return;
       const now = Date.now();
       if (text === last.code && now - last.t < 4000) return;
       last = { code: text, t: now };
       const m = /^SC:([\w-]+):([\w-]+)$/.exec(text);
-      if (!m) { beep(false); return show({ title: 'Not a SeatCheck card', msg: '' }); }
+      if (!m) { beep(false); return note('Not a SeatCheck card', ''); }
       const sec = S.sections.find(s => s.id === m[1]), sid = m[2];
-      if (!sec || !sec.students[sid]) { beep(false); return show({ title: 'Card not found', msg: 'This student is not in any class on this device.' }); }
-      const day = todayStr(), r = award(sec, sid, day), n = nameOf(sec, sid);
-      current = { sec, sid, day, entry: r.entry };
-      if (r.status === 'ok') { save(); beep(true); show({ title: n, msg: `${r.entry.task}`, pts: r.entry.pts, ok: true, cls: sec.id !== S.current ? sec.name : '' }); }
-      else if (r.status === 'dup') { beep(false); show({ title: n, msg: `Already scanned today. ${dayPoints(sec, sid, day)} points so far.`, ok: true, cls: sec.id !== S.current ? sec.name : '' }); }
-      else { beep(false); current = { sec, sid, day, entry: null }; show({ title: n, msg: 'No cleaning task this week. Add them to a group first.', ok: true }); }
-    }
-    function show(o) {
+      if (!sec || !sec.students[sid]) { beep(false); return note('Card not found', 'This student is not in any class on this device.'); }
+      const day = todayStr(), t = taskOf(sec, sid, day), n = nameOf(sec, sid);
+      if (!t) { beep(false); return note(n, 'No cleaning task this week. Add them to a group first.'); }
+      const existing = taskEntry(sec, sid, day);
+      pending = { sec, sid, day, t, existing };
+      beep(true);
       el('scResult').hidden = false;
-      el('scName').textContent = o.title;
-      el('scTask').textContent = (o.cls ? o.cls + ': ' : '') + o.msg;
-      el('scPts').textContent = o.pts !== undefined ? `+${o.pts}` : '';
-      el('scAdj').hidden = !o.ok;
-      el('scUndo').hidden = !(current && current.entry && o.pts !== undefined);
+      el('scName').textContent = n;
+      el('scPts').textContent = '';
+      el('scTask').textContent = (sec.id !== S.current ? sec.name + ': ' : '') + t.name +
+        (existing ? `. Already rated ${pctLabel(existing.pct || 1)} today; pick again to change it.` : '. How well was it done?');
+      el('scPick').hidden = false;
+      el('scPick').innerHTML = PCTS.map(p => `<button class="btn${p === 1 ? ' primary' : ''}" data-pct="${p}"><b>${r2(t.pts * p)}</b><small>${pctLabel(p)}</small></button>`).join('')
+        + `<button class="btn skip" data-skip="1">Skip, no points</button>`;
+    }
+    function note(title, msg) {
+      el('scResult').hidden = false; el('scPick').hidden = true;
+      el('scName').textContent = title; el('scTask').textContent = msg; el('scPts').textContent = '';
     }
     function onClick(e) {
       const b = e.target.closest('button'); if (!b) return;
       if (b.id === 'scClose') return close();
-      if (!current) return;
-      if (b.dataset.adj) {
-        const p = +b.dataset.adj; adjust(current.sec, current.sid, current.day, p); save();
-        el('scTask').textContent = `${dayPoints(current.sec, current.sid, current.day)} points today`;
-        el('scPts').textContent = (p > 0 ? '+' : '') + p;
+      if (b.dataset.pct && pending) {
+        const p = +b.dataset.pct, { sec, sid, day, existing } = pending;
+        let entry = existing;
+        if (existing) setPct(sec, existing, p); else entry = award(sec, sid, day, p).entry;
+        save(); beep(true);
+        current = { sec, sid, entry };
+        el('scPts').textContent = '+' + entry.pts;
+        el('scTask').textContent = 'Saved. Scan the next card.';
+        el('scPick').hidden = true;
+        el('scLast').hidden = false;
+        el('scLastTxt').textContent = `Last: ${shortName(nameOf(sec, sid))} +${entry.pts} (${pctLabel(p)})`;
+        pending = null; last.t = Date.now();
+        return;
       }
-      if (b.id === 'scUndo' && current.entry) {
+      if (b.dataset.skip) { pending = null; last.t = Date.now(); return note('Skipped', 'Scan the next card.'); }
+      if (b.id === 'scUndo' && current && current.entry) {
         removeEntry(current.sec, current.entry.id); save();
-        el('scTask').textContent = 'Scan undone'; el('scPts').textContent = ''; el('scUndo').hidden = true;
-        current.entry = null; last = { code: '', t: 0 };
+        el('scLastTxt').textContent = `Undone: ${shortName(nameOf(current.sec, current.sid))}`;
+        current = null; last = { code: '', t: 0 };
       }
     }
     document.addEventListener('DOMContentLoaded', () => el('scan').addEventListener('click', onClick));
