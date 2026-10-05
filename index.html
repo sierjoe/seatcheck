@@ -291,6 +291,15 @@ body.scanning{overflow:hidden}
   .gp-box h2 small{font-size:10pt;font-weight:400}
   .gp-box ol{margin:2mm 0 0;padding-left:6mm;font-size:12pt;line-height:1.5}
 }
+dialog select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--paper);font-size:16px;margin-top:4px;color:var(--ink)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dlg-scroll{max-height:62vh;overflow:auto;margin:0 -4px;padding:0 4px}
+.check-row{display:flex;gap:10px;align-items:center;font-size:15px;margin:4px 0 6px;color:var(--ink)}
+.check-row input{width:20px;height:20px;accent-color:var(--accent);margin:0}
+.tag{font-size:12px;font-weight:600;border-radius:999px;padding:1px 8px;margin-left:6px;background:var(--empty);color:var(--muted);border:1px solid var(--line)}
+.tag.out{color:var(--absent)}
+.move li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.move button{background:none;border:0;padding:0;text-align:left;flex:1}
 #toast{
   position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
   transform:translate(-50%,20px);opacity:0;pointer-events:none;
@@ -336,13 +345,28 @@ body.scanning{overflow:hidden}
 </dialog>
 <dialog id="schoolDlg">
   <form method="dialog">
-    <h2>School details for SF2</h2>
+    <h2>School details for SF2 and SF4</h2>
     <p>These fill the header of the form. School ID and name apply to all classes.</p>
+    <div class="dlg-scroll">
     <label class="field">School ID<input id="sdId" inputmode="numeric" autocomplete="off"></label>
     <label class="field">Name of school<input id="sdName" autocomplete="off"></label>
+    <div class="two">
+      <label class="field">Region<input id="sdRegion" placeholder="X" autocomplete="off"></label>
+      <label class="field">Division<input id="sdDivision" placeholder="Bukidnon" autocomplete="off"></label>
+    </div>
+    <label class="field">District<input id="sdDistrict" autocomplete="off"></label>
+    <label class="field">Name of adviser (for SF4)<input id="sdAdviser" autocomplete="off" autocapitalize="words"></label>
     <label class="field">School year (leave blank to fill it in from the month)<input id="sdYear" placeholder="2026-2027" autocomplete="off"></label>
-    <label class="field">Grade level of this class<input id="sdGrade" placeholder="Grade 7" autocomplete="off"></label>
-    <label class="field">Section of this class<input id="sdSection" autocomplete="off"></label>
+    <h2 class="h" style="font-size:15px">This class</h2>
+    <label class="field">Grade level<input id="sdGrade" placeholder="Grade 7" autocomplete="off"></label>
+    <label class="field">Section<input id="sdSection" autocomplete="off"></label>
+    <p class="muted small" style="margin:0 0 6px">Enrolment as of 1st Friday of June. Leave blank and the app counts it from your records.</p>
+    <div class="two">
+      <label class="field">Male<input id="sdEnrolM" type="number" inputmode="numeric" min="0" autocomplete="off"></label>
+      <label class="field">Female<input id="sdEnrolF" type="number" inputmode="numeric" min="0" autocomplete="off"></label>
+    </div>
+    <label class="check-row"><input type="checkbox" id="sdSf4"> Include this class in SF4 (advisory class)</label>
+    </div>
     <div class="dlg-actions">
       <button value="ok" class="btn primary">Save</button>
       <button value="cancel" class="btn" formnovalidate>Cancel</button>
@@ -396,6 +420,39 @@ body.scanning{overflow:hidden}
   </div>
 </div>
 <div id="printArea"></div>
+<dialog id="moveDlg">
+  <form method="dialog">
+    <h2 id="mvName"></h2>
+    <p>Used for the SF2 remarks and summary, and for SF4.</p>
+    <div class="dlg-scroll">
+    <label class="field">How they joined
+      <select id="mvIn">
+        <option value="">Enrolled from the start of the school year</option>
+        <option value="transfer">Transferred in</option>
+        <option value="late">Late enrollee (after the cut-off)</option>
+      </select></label>
+    <div id="mvInMore">
+      <label class="field">Date they joined<input type="date" id="mvInDate"></label>
+      <label class="field" id="mvFromWrap">From which school<input id="mvFrom" autocomplete="off"></label>
+    </div>
+    <label class="field">Status
+      <select id="mvOut">
+        <option value="">Currently enrolled</option>
+        <option value="dropped">Dropped out</option>
+        <option value="transferred">Transferred out</option>
+      </select></label>
+    <div id="mvOutMore">
+      <label class="field">Date<input type="date" id="mvOutDate"></label>
+      <label class="field" id="mvReasonWrap">Reason (SF2 legend)<select id="mvReason"></select></label>
+      <label class="field" id="mvToWrap">To which school<input id="mvTo" autocomplete="off"></label>
+    </div>
+    </div>
+    <div class="dlg-actions">
+      <button value="ok" class="btn primary">Save</button>
+      <button value="cancel" class="btn" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="jszip.min.js"></script>
 <script src="sf2.js"></script>
@@ -486,7 +543,9 @@ let picked = null;
 let sf2Month = '';
 
 const cur = () => S.sections.find(x => x.id === S.current) || S.sections[0];
-const hasHistory = (sec, id) => Object.values(sec.att).some(a => id in a);
+const hasHistory = (sec, id) => { const st = sec.students[id] || {}; return !!(st.inType || st.outType) || Object.values(sec.att).some(a => id in a); };
+const moveLabel = st => st.outType ? `${st.outType === 'dropped' ? 'Dropped out' : 'Transferred out'} ${shortDate(st.outDate)}`
+  : st.inType ? `${st.inType === 'transfer' ? 'Transferred in' : 'Late enrollee'} ${shortDate(st.inDate)}` : '';
 
 /* ---------- UI bits ---------- */
 let tt;
@@ -614,12 +673,14 @@ function renderSeats(sec) {
     return `<button class="seat${p}" data-i="${i}">${SEX_ICON[sec.students[id].sex] || ''}${seatLabel(sec.students[id].name)}</button>`;
   });
   const seated = sec.seats.filter(Boolean).length;
-  const hint = seatMode === 'edit' ? 'Tap a seat to add or change a name.'
+  const hint = seatMode === 'status' ? 'Tap a student to record a transfer in, transfer out, or drop out.'
+    : seatMode === 'edit' ? 'Tap a seat to add or change a name.'
     : picked === null ? 'Tap a student, then tap where they should sit.' : 'Now tap the new seat.';
   return `
-  <div class="seg">
+  <div class="seg seg3">
     <button class="${seatMode === 'edit' ? 'on' : ''}" data-act="mode-edit">Edit names</button>
-    <button class="${seatMode === 'swap' ? 'on' : ''}" data-act="mode-swap">Move students</button>
+    <button class="${seatMode === 'swap' ? 'on' : ''}" data-act="mode-swap">Move seats</button>
+    <button class="${seatMode === 'status' ? 'on' : ''}" data-act="mode-status">Status</button>
   </div>
   <p class="muted small hint">${hint}</p>
   ${grid}
@@ -639,26 +700,28 @@ function renderRecords(sec) {
   if (!dates.length) return `<p class="empty-note">No attendance saved yet for ${esc(sec.name)}.<br>Check attendance first, then your records show up here.</p>`;
   const ids = Object.keys(sec.students).filter(id => sec.seats.includes(id) || hasHistory(sec, id));
   const rows = ids.map(id => {
-    const r = { name: sec.students[id].name, A: [], L: [], E: [] };
+    const r = { id, name: sec.students[id].name, move: moveLabel(sec.students[id]), A: [], L: [], E: [] };
     dates.forEach(d => { const m = sec.att[d][id]; if (m) r[m].push(d); });
     return r;
   }).sort((a, b) => (b.A.length + b.E.length) - (a.A.length + a.E.length) || b.L.length - a.L.length || a.name.localeCompare(b.name));
   const detail = r => ['A', 'L', 'E'].filter(k => r[k].length).map(k => `${ST[k].word}: ${r[k].map(shortDate).join(', ')}`).join('<br>');
   return `
   <section class="sf2">
-    <h2>School Form 2</h2>
-    <p class="muted small">Fills the DepEd SF2 with this class's attendance for the month you pick.</p>
+    <h2>School forms</h2>
+    <p class="muted small">Fills the DepEd SF2 for this class, or SF4 for all your advisory classes, for the month you pick.</p>
     <input type="month" class="month" id="sf2Month" value="${sf2Month || dates[dates.length - 1].slice(0, 7)}" aria-label="Month for SF2">
     <div class="row">
-      <button class="btn primary" data-act="sf2">${ic('download')}Download SF2</button>
-      <button class="btn" data-act="school">${ic('school')}School details</button>
+      <button class="btn primary" data-act="sf2">${ic('download')}SF2</button>
+      <button class="btn primary" data-act="sf4">${ic('download')}SF4</button>
     </div>
+    <button class="btn wide" data-act="school" style="margin-top:10px">${ic('school')}School details</button>
   </section>
+  ${movementList(sec)}
   <p class="summary" style="margin-top:0"><span><strong>${dates.length}</strong> day${dates.length > 1 ? 's' : ''} checked</span></p>
   <button class="btn wide" data-act="csv">${ic('sheet')}Export attendance to Excel</button>
   <div class="rec-head"><span>Student</span><span class="rec-counts"><span class="count">Abs</span><span class="count">Late</span><span class="count">Exc</span></span></div>
   <ul class="rec">${rows.map(r => `<li>
-    <div class="rec-top"><span>${esc(r.name)}</span><span class="rec-counts">${['A', 'L', 'E'].map(k => `<span class="count c-${k.toLowerCase()}${r[k].length ? ' has' : ''}">${r[k].length}</span>`).join('')}</span></div>
+    <div class="rec-top"><span>${esc(r.name)}${r.move ? `<span class="tag${sec.students[r.id].outType ? ' out' : ''}">${esc(r.move)}</span>` : ''}</span><span class="rec-counts">${['A', 'L', 'E'].map(k => `<span class="count c-${k.toLowerCase()}${r[k].length ? ' has' : ''}">${r[k].length}</span>`).join('')}</span></div>
     ${detail(r) ? `<div class="muted small">${detail(r)}</div>` : ''}
   </li>`).join('')}</ul>`;
 }
@@ -780,6 +843,10 @@ async function pasteNames(sec) {
 }
 
 async function tapSeat(sec, i) {
+  if (seatMode === 'status') {
+    if (!sec.seats[i]) return toast('Tap a seat with a student');
+    return editMovement(sec, sec.seats[i]);
+  }
   if (seatMode === 'swap') {
     if (picked === null) {
       if (!sec.seats[i]) return toast('Tap a seat with a student first');
@@ -840,17 +907,87 @@ function schoolDetails(sec) {
     const d = $('#schoolDlg'), sc = S.school || {}, c = sec.sf2 || {};
     $('#sdId').value = sc.id || ''; $('#sdName').value = sc.name || ''; $('#sdYear').value = sc.year || '';
     $('#sdGrade').value = c.grade || ''; $('#sdSection').value = c.section || sec.name;
+    $('#sdRegion').value = sc.region || ''; $('#sdDivision').value = sc.division || ''; $('#sdDistrict').value = sc.district || ''; $('#sdAdviser').value = sc.adviser || '';
+    $('#sdEnrolM').value = c.enrolM ?? ''; $('#sdEnrolF').value = c.enrolF ?? ''; $('#sdSf4').checked = c.sf4 !== false;
+    try {
+      const now = sf2Month || todayStr().slice(0, 7), st = SF2.stats({ ...sec, sf2: {} }, now);
+      $('#sdEnrolM').placeholder = `Auto: ${st.enrol.M}`; $('#sdEnrolF').placeholder = `Auto: ${st.enrol.F}`;
+    } catch (e) {}
     d.returnValue = '';
     d.onclose = () => {
       if (d.returnValue === 'ok') {
-        S.school = { id: $('#sdId').value.trim(), name: $('#sdName').value.trim(), year: $('#sdYear').value.trim() };
-        sec.sf2 = { grade: $('#sdGrade').value.trim(), section: $('#sdSection').value.trim() };
+        S.school = { id: $('#sdId').value.trim(), name: $('#sdName').value.trim(), year: $('#sdYear').value.trim(),
+          region: $('#sdRegion').value.trim(), division: $('#sdDivision').value.trim(), district: $('#sdDistrict').value.trim(), adviser: $('#sdAdviser').value.trim() };
+        const num = v => v.trim() === '' ? '' : Math.max(0, Math.round(+v));
+        sec.sf2 = { grade: $('#sdGrade').value.trim(), section: $('#sdSection').value.trim(),
+          enrolM: num($('#sdEnrolM').value), enrolF: num($('#sdEnrolF').value), sf4: $('#sdSf4').checked };
         save(); toast('School details saved');
       }
       res(d.returnValue === 'ok');
     };
     d.showModal();
   });
+}
+
+function movementList(sec) {
+  const ids = Object.keys(sec.students).filter(id => sec.students[id].inType || sec.students[id].outType)
+    .sort((a, b) => sec.students[a].name.localeCompare(sec.students[b].name));
+  return `<h2 class="h" style="margin-top:0">Learner movement</h2>
+    ${ids.length ? `<ul class="move">${ids.map(id => `<li><button data-act="movement" data-sid="${id}"><b>${esc(sec.students[id].name)}</b><br>
+      <span class="muted small">${esc([sec.students[id].inType && (sec.students[id].inType === 'transfer' ? 'Transferred in ' : 'Late enrollee ') + shortDate(sec.students[id].inDate),
+        sec.students[id].outType && (sec.students[id].outType === 'dropped' ? 'Dropped out ' : 'Transferred out ') + shortDate(sec.students[id].outDate)].filter(Boolean).join(', '))}</span></button>
+      ${ic('edit')}</li>`).join('')}</ul>` : ''}
+    <p class="muted small" style="margin:8px 0 18px">To record a transfer or drop out, go to Seats, tap Status, then tap the student.</p>`;
+}
+
+function editMovement(sec, sid) {
+  const st = sec.students[sid], d = $('#moveDlg');
+  if (!$('#mvReason').options.length)
+    $('#mvReason').innerHTML = Object.entries(SF2.DROP_REASONS).map(([k, v]) => `<option value="${k}">${k} ${esc(v)}</option>`).join('');
+  $('#mvName').textContent = st.name;
+  $('#mvIn').value = st.inType || ''; $('#mvInDate').value = st.inDate || todayStr(); $('#mvFrom').value = st.inFrom || '';
+  $('#mvOut').value = st.outType || ''; $('#mvOutDate').value = st.outDate || todayStr();
+  $('#mvReason').value = st.outType === 'dropped' && st.outNote ? st.outNote : 'b.1';
+  $('#mvTo').value = st.outType === 'transferred' ? st.outNote || '' : '';
+  const sync = () => {
+    $('#mvInMore').hidden = !$('#mvIn').value; $('#mvFromWrap').hidden = $('#mvIn').value !== 'transfer';
+    $('#mvOutMore').hidden = !$('#mvOut').value;
+    $('#mvReasonWrap').hidden = $('#mvOut').value !== 'dropped'; $('#mvToWrap').hidden = $('#mvOut').value !== 'transferred';
+  };
+  $('#mvIn').onchange = $('#mvOut').onchange = sync; sync();
+  d.returnValue = '';
+  d.onclose = () => {
+    if (d.returnValue !== 'ok') return;
+    const inT = $('#mvIn').value, outT = $('#mvOut').value;
+    Object.assign(st, {
+      inType: inT || undefined, inDate: inT ? $('#mvInDate').value || todayStr() : undefined, inFrom: inT === 'transfer' ? $('#mvFrom').value.trim() : undefined,
+      outType: outT || undefined, outDate: outT ? $('#mvOutDate').value || todayStr() : undefined,
+      outNote: outT === 'dropped' ? $('#mvReason').value : outT === 'transferred' ? $('#mvTo').value.trim() : undefined
+    });
+    for (const k of Object.keys(st)) if (st[k] === undefined) delete st[k];
+    const seat = sec.seats.indexOf(sid);
+    if (st.outType && seat >= 0) sec.seats[seat] = null;          // leaves the seating chart, keeps the records
+    if (!st.outType && seat < 0) {                                // back in class: give them a seat
+      let free = sec.seats.indexOf(null);
+      if (free < 0) { resize(sec, Math.min(12, sec.rows + 1), sec.cols); free = sec.seats.indexOf(null); }
+      if (free >= 0) sec.seats[free] = sid;
+    }
+    save(); render();
+    toast(st.outType ? `${st.name} removed from the seating chart. Records kept.` : 'Saved');
+  };
+  d.showModal();
+}
+
+async function downloadSF4(sec) {
+  const ym = sf2Month || ($('#sf2Month') || {}).value;
+  if (!ym) return toast('Pick a month first');
+  if (!S.school || !S.school.name) { if (!(await schoolDetails(sec))) return; }
+  try {
+    toast('Preparing SF4…');
+    const blob = await SF2.buildSF4(S, ym);
+    const [y, m] = ym.split('-').map(Number);
+    await shareFile(`SF4-${SF2.MONTHS[m - 1]}-${y}.xlsx`, blob, blob.type);
+  } catch (e) { toast(e.message || 'Could not make the SF4'); }
 }
 
 async function downloadSF2(sec) {
@@ -902,6 +1039,8 @@ main.addEventListener('click', async e => {
     case 'saveday': sec.att[date] = {}; save(); toast('Saved as all present'); return render();
     case 'mode-edit': seatMode = 'edit'; picked = null; return render();
     case 'mode-swap': seatMode = 'swap'; picked = null; return render();
+    case 'mode-status': seatMode = 'status'; picked = null; return render();
+    case 'movement': return editMovement(sec, b.dataset.sid);
     case 'rows-': case 'rows+': case 'cols-': case 'cols+': {
       const d = act.endsWith('+') ? 1 : -1, isR = act[0] === 'r';
       const rows = sec.rows + (isR ? d : 0), cols = sec.cols + (isR ? 0 : d);
@@ -914,6 +1053,7 @@ main.addEventListener('click', async e => {
     case 'csv': return exportCSV(sec);
     case 'school': return schoolDetails(sec);
     case 'sf2': return downloadSF2(sec);
+    case 'sf4': return downloadSF4(sec);
     case 'pick': S.current = id; save(); view = 'check'; return render();
     case 'rename': {
       const s = S.sections.find(x => x.id === id);
