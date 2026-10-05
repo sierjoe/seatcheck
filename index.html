@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#24443A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SeatCheck">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<title>SeatCheck</title>
+<style>
+:root{
+  --paper:#EEF1EC; --surface:#FFFFFF; --line:#CBD4CD; --ink:#1C2A25; --muted:#66756E;
+  --board:#24443A; --board-ink:#E8F0EA; --absent:#C23B33; --accent:#2F6B57; --empty:#E3E8E4;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#121A17; --surface:#1C2723; --line:#2E3C36; --ink:#E6EEE9; --muted:#93A39B;
+    --board:#1F3D33; --board-ink:#E8F0EA; --absent:#E0564C; --accent:#6FB79A; --empty:#17201C;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--paper);color:var(--ink);
+  font:16px/1.45 ui-rounded,"SF Pro Rounded","Avenir Next",system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;
+}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.app{display:flex;flex-direction:column;height:100%;max-width:900px;margin:0 auto}
+
+/* header doubles as the chalkboard */
+header{
+  background:var(--board);color:var(--board-ink);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 12px;
+}
+#secBtn{
+  background:none;border:0;padding:4px 0;display:flex;align-items:center;gap:8px;
+  font-size:22px;font-weight:700;letter-spacing:-.01em;text-align:left;
+}
+#secBtn svg{opacity:.7;flex:none}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 24px}
+
+nav.tabs{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  background:var(--surface);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+nav.tabs button{
+  background:none;border:0;padding:8px 0 6px;font-size:12px;color:var(--muted);
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+nav.tabs button svg{width:24px;height:24px}
+nav.tabs button.on{color:var(--accent);font-weight:700}
+
+/* date bar */
+.datebar{display:flex;align-items:center;gap:8px}
+.icon-btn{
+  width:40px;height:40px;flex:none;border-radius:50%;border:1px solid var(--line);
+  background:var(--surface);font-size:22px;line-height:1;display:grid;place-items:center;padding:0;
+}
+.date{
+  position:relative;flex:1;height:40px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface);display:grid;place-items:center;font-weight:600;
+}
+.date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0}
+.today{display:block;margin:6px auto 0;background:none;border:0;color:var(--accent);font-weight:600;font-size:14px}
+
+.summary{margin:14px 0 4px;font-size:17px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.summary strong{font-size:22px}
+.pill{background:var(--absent);color:#fff;border-radius:999px;padding:2px 10px;font-size:14px;font-weight:700}
+
+/* room */
+.room{margin-top:10px}
+.board{
+  background:var(--board);color:var(--board-ink);border-radius:6px;
+  text-align:center;font-size:13px;padding:5px;margin:8px 0;
+}
+.grid-wrap{overflow-x:auto;padding:2px 2px 4px}
+.grid{display:grid;gap:5px;grid-template-columns:repeat(var(--cols),minmax(40px,1fr))}
+.seat{
+  aspect-ratio:1/1;min-width:0;padding:2px;
+  border:1px solid var(--line);border-bottom-width:3px;border-radius:8px;
+  background:var(--surface);color:var(--ink);
+  font-size:11px;line-height:1.15;font-weight:600;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  flex-direction:column;gap:1px;
+  overflow:hidden;overflow-wrap:break-word;hyphens:auto;user-select:none;-webkit-user-select:none;
+  touch-action:manipulation;transition:transform .08s,background-color .12s;
+}
+.seat:active{transform:scale(.94)}
+.seat.absent{background:var(--absent);border-color:var(--absent);color:#fff}
+.seat.empty{background:var(--empty);border-style:dashed;border-bottom-width:1px;color:var(--muted);font-size:18px;font-weight:400}
+.seat.picked{outline:3px solid var(--accent);outline-offset:1px}
+.seat span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%;flex:none;word-break:break-word}
+.seat .first{font-weight:400;font-size:10px;-webkit-line-clamp:1;opacity:.85}
+@media (prefers-reduced-motion:reduce){.seat{transition:none}.seat:active{transform:none}}
+
+.after{margin-top:16px}
+h2.h{font-size:18px;margin:18px 0 8px}
+h3{font-size:15px;margin:0 0 4px;color:var(--absent)}
+.names{margin:0 0 12px}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.hint{margin:10px 0 0}
+
+.btn{
+  border:1px solid var(--line);background:var(--surface);border-radius:10px;
+  padding:11px 16px;font-weight:600;
+}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.btn.primary{color:#0E1B16}}
+.btn.wide{width:100%}
+.row{display:flex;gap:10px}
+.row .btn{flex:1}
+.link{background:none;border:0;color:var(--accent);font-weight:600;font-size:14px;padding:8px 6px}
+.danger{color:var(--absent)}
+
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--empty);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:8px;border-radius:8px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+.steppers{display:flex;gap:12px;margin:14px 0}
+.stepper{flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.stepper span{flex:1;font-size:14px;color:var(--muted)}
+.stepper b{min-width:22px;text-align:center}
+.stepper .icon-btn{width:34px;height:34px;font-size:18px}
+.toggle{display:flex;gap:10px;align-items:center;font-size:15px;margin:4px 0 10px}
+.toggle input{width:20px;height:20px;accent-color:var(--accent)}
+
+ul{list-style:none;margin:0;padding:0}
+.rec li{padding:10px 0;border-bottom:1px solid var(--line)}
+.rec-top{display:flex;justify-content:space-between;gap:12px;font-weight:600}
+.rec-head{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:16px 0 0;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.count{min-width:28px;text-align:center;color:var(--muted)}
+.count.has{color:var(--absent)}
+
+.classes li{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+.cls{flex:1;text-align:left;background:none;border:0;padding:12px 0;display:flex;flex-direction:column}
+.cls small{color:var(--muted);font-size:13px}
+.classes li.on .cls span{color:var(--accent);font-weight:700}
+.classes li.on .cls span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle}
+.empty-note{color:var(--muted);text-align:center;margin:40px 12px}
+
+dialog{border:0;border-radius:16px;padding:0;width:min(92vw,420px);background:var(--surface);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog form{padding:18px}
+dialog h2{margin:0 0 4px;font-size:18px}
+dialog p{margin:0 0 12px;font-size:14px;color:var(--muted)}
+dialog input,dialog textarea{
+  width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  background:var(--paper);font-size:16px;
+}
+dialog textarea{resize:vertical}
+.dlg-actions{display:flex;flex-direction:row-reverse;gap:10px;margin-top:14px}
+.dlg-actions .btn{flex:1}
+
+#toast{
+  position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+  transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;
+  font-size:14px;max-width:88vw;transition:opacity .2s,transform .2s;z-index:10;
+}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <button id="secBtn" aria-label="Switch class">
+      <span id="secName">Class</span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+    </button>
+  </header>
+  <main id="main"></main>
+  <nav class="tabs">
+    <button data-view="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M8 14l3 3 5-6"/></svg>Check</button>
+    <button data-view="seats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Seats</button>
+    <button data-view="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Records</button>
+    <button data-view="classes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V6a2 2 0 0 1 2-2h14v13H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h14"/></svg>Classes</button>
+  </nav>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h2 id="dlgTitle"></h2>
+    <p id="dlgMsg"></p>
+    <input id="dlgInput" autocomplete="off" autocapitalize="words">
+    <textarea id="dlgArea" rows="8" autocapitalize="words"></textarea>
+    <div class="dlg-actions">
+      <button value="ok" class="btn primary" id="dlgOk">Save</button>
+      <button value="cancel" class="btn" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const KEY = 'seatcheck-data-v1';
+const $ = s => document.querySelector(s);
+const main = $('#main');
+
+/* ---------- helpers ---------- */
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+const pad = n => String(n).padStart(2, '0');
+const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const todayStr = () => fmt(new Date());
+const toDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const shiftDate = (s, n) => { const d = toDate(s); d.setDate(d.getDate() + n); return fmt(d); };
+const prettyDate = s => toDate(s).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const shortDate = s => toDate(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+// "Dela Cruz, Juan" shows as surname on top, first name below
+const seatLabel = n => { const k = n.indexOf(','); return k > 0
+  ? `<span>${esc(n.slice(0, k).trim())}</span><span class="first">${esc(n.slice(k + 1).trim())}</span>`
+  : `<span>${esc(n)}</span>`; };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function blankSection(name, rows = 5, cols = 6) {
+  return { id: uid(), name, rows, cols, flip: false, students: {}, seats: Array(rows * cols).fill(null), att: {} };
+}
+
+/* ---------- storage ---------- */
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.sections) && d.sections.length) return d; }
+  } catch (e) {}
+  const s = blankSection('My first class');
+  return { version: 1, sections: [s], current: s.id };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { toast('Could not save. Export a backup now.'); }
+}
+
+let S = load();
+let view = 'check';
+let date = todayStr();
+let lastToday = date;
+let seatMode = 'edit';
+let picked = null;
+
+const cur = () => S.sections.find(x => x.id === S.current) || S.sections[0];
+const hasHistory = (sec, id) => Object.values(sec.att).some(a => a.includes(id));
+
+/* ---------- UI bits ---------- */
+let tt;
+function toast(m) {
+  const t = $('#toast'); t.textContent = m; t.classList.add('show');
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function ask(o) {
+  return new Promise(res => {
+    const d = $('#dlg'), inp = $('#dlgInput'), ar = $('#dlgArea');
+    $('#dlgTitle').textContent = o.title;
+    $('#dlgMsg').textContent = o.msg || ''; $('#dlgMsg').hidden = !o.msg;
+    inp.hidden = !!o.multiline; ar.hidden = !o.multiline;
+    const f = o.multiline ? ar : inp;
+    f.value = o.value || ''; f.placeholder = o.placeholder || '';
+    $('#dlgOk').textContent = o.ok || 'Save';
+    d.returnValue = '';
+    d.onclose = () => res(d.returnValue === 'ok' ? f.value : null);
+    d.showModal();
+    setTimeout(() => f.focus(), 60);
+  });
+}
+
+async function shareFile(name, text, type) {
+  const blob = new Blob([text], { type });
+  const touch = navigator.maxTouchPoints > 1;
+  try {
+    const file = new File([blob], name, { type });
+    if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: name });
+      return true;
+    }
+  } catch (e) { if (e.name === 'AbortError') return false; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  return true;
+}
+
+/* ---------- rendering ---------- */
+function render() {
+  const sec = cur();
+  $('#secName').textContent = sec.name;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+  main.innerHTML =
+    view === 'check' ? renderCheck(sec) :
+    view === 'seats' ? renderSeats(sec) :
+    view === 'records' ? renderRecords(sec) : renderClasses();
+}
+
+function gridHTML(sec, cell) {
+  const rows = [...Array(sec.rows).keys()], cols = [...Array(sec.cols).keys()];
+  if (sec.flip) { rows.reverse(); cols.reverse(); }
+  let cells = '';
+  for (const r of rows) for (const c of cols) cells += cell(r * sec.cols + c);
+  const board = '<div class="board">Front of room</div>';
+  return `<div class="room">${sec.flip ? '' : board}
+    <div class="grid-wrap"><div class="grid" style="--cols:${sec.cols}">${cells}</div></div>
+    ${sec.flip ? board : ''}</div>`;
+}
+
+function renderCheck(sec) {
+  const absent = new Set(sec.att[date] || []);
+  const ids = sec.seats.filter(Boolean);
+  const total = ids.length;
+  const absIds = ids.filter(id => absent.has(id));
+  const saved = sec.att[date] !== undefined;
+  const grid = gridHTML(sec, i => {
+    const id = sec.seats[i];
+    if (!id) return `<button class="seat empty" data-i="${i}" aria-label="Empty seat"></button>`;
+    const a = absent.has(id);
+    return `<button class="seat${a ? ' absent' : ''}" data-i="${i}" aria-pressed="${a}">${seatLabel(sec.students[id].name)}</button>`;
+  });
+  const absNames = absIds.map(id => sec.students[id].name).sort((a, b) => a.localeCompare(b));
+  return `
+  <div class="datebar">
+    <button class="icon-btn" data-act="prev" aria-label="Previous day">‹</button>
+    <label class="date"><span>${esc(prettyDate(date))}</span><input type="date" id="dateIn" value="${date}" aria-label="Pick a date"></label>
+    <button class="icon-btn" data-act="next" aria-label="Next day">›</button>
+  </div>
+  ${date !== todayStr() ? '<button class="today" data-act="today">Go to today</button>' : ''}
+  ${total
+    ? `<p class="summary"><span><strong>${total - absIds.length}</strong> of ${total} present</span>${absIds.length ? `<span class="pill">${absIds.length} absent</span>` : ''}</p>`
+    : `<p class="summary muted">No students yet. Add names in the Seats tab.</p>`}
+  ${grid}
+  <div class="after">
+    ${absNames.length ? `<h3>Absent</h3><p class="names">${absNames.map(esc).join('; ')}</p>` : ''}
+    ${total ? (saved
+      ? `<p class="muted small">Saved for this day. Tap a seat again to undo.</p>`
+      : `<button class="btn primary wide" data-act="saveday">Save as all present</button>
+         <p class="muted small">Tap a seat to mark a student absent. The day saves automatically.</p>`) : ''}
+  </div>`;
+}
+
+function renderSeats(sec) {
+  const grid = gridHTML(sec, i => {
+    const id = sec.seats[i], p = picked === i ? ' picked' : '';
+    if (!id) return `<button class="seat empty${p}" data-i="${i}" aria-label="Empty seat">+</button>`;
+    return `<button class="seat${p}" data-i="${i}">${seatLabel(sec.students[id].name)}</button>`;
+  });
+  const seated = sec.seats.filter(Boolean).length;
+  const hint = seatMode === 'edit' ? 'Tap a seat to add or change a name.'
+    : picked === null ? 'Tap a student, then tap where they should sit.' : 'Now tap the new seat.';
+  return `
+  <div class="seg">
+    <button class="${seatMode === 'edit' ? 'on' : ''}" data-act="mode-edit">Edit names</button>
+    <button class="${seatMode === 'swap' ? 'on' : ''}" data-act="mode-swap">Move students</button>
+  </div>
+  <p class="muted small hint">${hint}</p>
+  ${grid}
+  <div class="after">
+    <button class="btn wide" data-act="fill">Fill empty seats from a list</button>
+    <div class="steppers">
+      <div class="stepper"><span>Rows</span><button class="icon-btn" data-act="rows-" aria-label="Fewer rows">−</button><b>${sec.rows}</b><button class="icon-btn" data-act="rows+" aria-label="More rows">+</button></div>
+      <div class="stepper"><span>Columns</span><button class="icon-btn" data-act="cols-" aria-label="Fewer columns">−</button><b>${sec.cols}</b><button class="icon-btn" data-act="cols+" aria-label="More columns">+</button></div>
+    </div>
+    <label class="toggle"><input type="checkbox" id="flipIn" ${sec.flip ? 'checked' : ''}> Teacher's view (front row at the bottom)</label>
+    <p class="muted small">${seated} students seated, ${sec.seats.length - seated} empty seats.</p>
+  </div>`;
+}
+
+function renderRecords(sec) {
+  const dates = Object.keys(sec.att).sort();
+  if (!dates.length) return `<p class="empty-note">No attendance saved yet for ${esc(sec.name)}.<br>Check attendance first, then your records show up here.</p>`;
+  const ids = Object.keys(sec.students).filter(id => sec.seats.includes(id) || hasHistory(sec, id));
+  const rows = ids.map(id => ({ name: sec.students[id].name, ds: dates.filter(d => sec.att[d].includes(id)) }))
+    .sort((a, b) => b.ds.length - a.ds.length || a.name.localeCompare(b.name));
+  return `
+  <p class="summary" style="margin-top:0"><span><strong>${dates.length}</strong> day${dates.length > 1 ? 's' : ''} checked</span></p>
+  <button class="btn primary wide" data-act="csv">Export to CSV (Excel)</button>
+  <div class="rec-head"><span>Student</span><span>Absences</span></div>
+  <ul class="rec">${rows.map(r => `<li>
+    <div class="rec-top"><span>${esc(r.name)}</span><span class="count${r.ds.length ? ' has' : ''}">${r.ds.length}</span></div>
+    ${r.ds.length ? `<div class="muted small">${r.ds.map(shortDate).join(', ')}</div>` : ''}
+  </li>`).join('')}</ul>`;
+}
+
+function renderClasses() {
+  return `
+  <h2 class="h" style="margin-top:0">Classes</h2>
+  <ul class="classes">${S.sections.map(s => `<li class="${s.id === S.current ? 'on' : ''}">
+    <button class="cls" data-act="pick" data-id="${s.id}"><span>${esc(s.name)}</span><small>${s.seats.filter(Boolean).length} students</small></button>
+    <button class="link" data-act="rename" data-id="${s.id}">Rename</button>
+    <button class="link danger" data-act="del" data-id="${s.id}">Delete</button>
+  </li>`).join('')}</ul>
+  <button class="btn wide" data-act="addcls" style="margin-top:12px">Add a class</button>
+
+  <h2 class="h">Backup</h2>
+  <p class="muted small">Everything is saved on this device only. Export a backup every week, and use it to move your data between your iPhone and Mac with AirDrop.</p>
+  <p class="small">${S.lastBackup ? 'Last backup: ' + esc(prettyDate(S.lastBackup)) : 'No backup yet.'}</p>
+  <div class="row">
+    <button class="btn primary" data-act="export">Export backup</button>
+    <button class="btn" data-act="import">Import backup</button>
+  </div>
+  <input type="file" id="fileIn" accept=".json,application/json" hidden>`;
+}
+
+/* ---------- actions ---------- */
+function tapCheck(sec, i) {
+  const id = sec.seats[i];
+  if (!id) return toast('Empty seat');
+  const arr = sec.att[date] || (sec.att[date] = []);
+  const k = arr.indexOf(id);
+  k >= 0 ? arr.splice(k, 1) : arr.push(id);
+  save(); render();
+}
+
+async function tapSeat(sec, i) {
+  if (seatMode === 'swap') {
+    if (picked === null) {
+      if (!sec.seats[i]) return toast('Tap a seat with a student first');
+      picked = i; return render();
+    }
+    if (picked !== i) [sec.seats[picked], sec.seats[i]] = [sec.seats[i], sec.seats[picked]];
+    picked = null; save(); return render();
+  }
+  const id = sec.seats[i];
+  const r = Math.floor(i / sec.cols) + 1, c = (i % sec.cols) + 1;
+  const v = await ask({
+    title: id ? 'Edit student' : 'Add student',
+    msg: `Row ${r}, seat ${c}. Leave blank to empty this seat.`,
+    value: id ? sec.students[id].name : '',
+    placeholder: 'e.g. Dela Cruz, Juan'
+  });
+  if (v === null) return;
+  const name = v.trim();
+  if (!name) {
+    if (id) { sec.seats[i] = null; if (!hasHistory(sec, id)) delete sec.students[id]; }
+  } else if (id) sec.students[id].name = name;
+  else { const nid = uid(); sec.students[nid] = { name }; sec.seats[i] = nid; }
+  save(); render();
+}
+
+function resize(sec, rows, cols) {
+  const n = Array(rows * cols).fill(null);
+  for (let r = 0; r < Math.min(rows, sec.rows); r++)
+    for (let c = 0; c < Math.min(cols, sec.cols); c++)
+      n[r * cols + c] = sec.seats[r * sec.cols + c];
+  const dropped = sec.seats.filter(id => id && !n.includes(id));
+  if (dropped.length && !confirm(`${dropped.length} student(s) in that row or column will lose their seat. Their records stay. Continue?`)) return false;
+  dropped.forEach(id => { if (!hasHistory(sec, id)) delete sec.students[id]; });
+  Object.assign(sec, { rows, cols, seats: n });
+  return true;
+}
+
+function exportCSV(sec) {
+  const dates = Object.keys(sec.att).sort();
+  const ids = Object.keys(sec.students).filter(id => sec.seats.includes(id) || hasHistory(sec, id))
+    .sort((a, b) => sec.students[a].name.localeCompare(sec.students[b].name));
+  const q = v => /[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v;
+  const lines = [['Student', 'Seat', 'Absences', ...dates].map(q).join(',')];
+  for (const id of ids) {
+    const i = sec.seats.indexOf(id);
+    const seat = i >= 0 ? `Row ${Math.floor(i / sec.cols) + 1} Seat ${(i % sec.cols) + 1}` : '';
+    const marks = dates.map(d => sec.att[d].includes(id) ? 'A' : 'P');
+    lines.push([sec.students[id].name, seat, marks.filter(m => m === 'A').length, ...marks].map(q).join(','));
+  }
+  const safe = sec.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'class';
+  shareFile(`${safe}-attendance-${todayStr()}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv');
+}
+
+function importFile(f) {
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const d = JSON.parse(rd.result);
+      if (!d || !Array.isArray(d.sections) || !d.sections.length) throw 0;
+      if (!confirm('Replace all classes and attendance on this device with this backup?')) return;
+      S = d;
+      if (!S.sections.find(s => s.id === S.current)) S.current = S.sections[0].id;
+      save(); render(); toast('Backup imported');
+    } catch (e) { toast('That file is not a SeatCheck backup'); }
+  };
+  rd.readAsText(f);
+}
+
+main.addEventListener('click', async e => {
+  const sec = cur();
+  const seat = e.target.closest('.seat');
+  if (seat) {
+    const i = +seat.dataset.i;
+    if (view === 'check') return tapCheck(sec, i);
+    if (view === 'seats') return tapSeat(sec, i);
+    return;
+  }
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const act = b.dataset.act, id = b.dataset.id;
+  switch (act) {
+    case 'prev': date = shiftDate(date, -1); return render();
+    case 'next': date = shiftDate(date, 1); return render();
+    case 'today': date = todayStr(); return render();
+    case 'saveday': sec.att[date] = []; save(); toast('Saved as all present'); return render();
+    case 'mode-edit': seatMode = 'edit'; picked = null; return render();
+    case 'mode-swap': seatMode = 'swap'; picked = null; return render();
+    case 'rows-': case 'rows+': case 'cols-': case 'cols+': {
+      const d = act.endsWith('+') ? 1 : -1, isR = act[0] === 'r';
+      const rows = sec.rows + (isR ? d : 0), cols = sec.cols + (isR ? 0 : d);
+      if (rows < 1 || cols < 1 || rows > 12 || cols > 12) return;
+      if (resize(sec, rows, cols)) { picked = null; save(); render(); }
+      return;
+    }
+    case 'fill': {
+      const v = await ask({
+        title: 'Fill empty seats',
+        msg: 'Paste one name per line, like a column copied from Excel. Names fill empty seats from the front row, left to right.',
+        multiline: true, ok: 'Fill seats', placeholder: 'Dela Cruz, Juan\nSantos, Maria'
+      });
+      if (v === null) return;
+      const names = v.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      let k = 0;
+      for (let i = 0; i < sec.seats.length && k < names.length; i++) {
+        if (!sec.seats[i]) { const nid = uid(); sec.students[nid] = { name: names[k++] }; sec.seats[i] = nid; }
+      }
+      save(); render();
+      const left = names.length - k;
+      return toast(left ? `${k} added. ${left} didn't fit, so add more rows or columns.` : `${k} students added`);
+    }
+    case 'csv': return exportCSV(sec);
+    case 'pick': S.current = id; save(); view = 'check'; return render();
+    case 'rename': {
+      const s = S.sections.find(x => x.id === id);
+      const v = await ask({ title: 'Rename class', value: s.name });
+      if (v && v.trim()) { s.name = v.trim(); save(); render(); }
+      return;
+    }
+    case 'del': {
+      if (S.sections.length === 1) return toast('Keep at least one class');
+      const s = S.sections.find(x => x.id === id);
+      if (!confirm(`Delete ${s.name} and all its attendance? This can't be undone.`)) return;
+      S.sections = S.sections.filter(x => x.id !== id);
+      if (S.current === id) S.current = S.sections[0].id;
+      save(); return render();
+    }
+    case 'addcls': {
+      const v = await ask({ title: 'Add a class', placeholder: 'e.g. Grade 7 – Rizal', ok: 'Add class' });
+      if (!v || !v.trim()) return;
+      const s = blankSection(v.trim());
+      S.sections.push(s); S.current = s.id; save();
+      view = 'seats'; seatMode = 'edit'; render();
+      return toast('Class added. Now set up the seats.');
+    }
+    case 'export': {
+      const ok = await shareFile(`seatcheck-backup-${todayStr()}.json`, JSON.stringify(S), 'application/json');
+      if (ok) { S.lastBackup = todayStr(); save(); render(); }
+      return;
+    }
+    case 'import': return $('#fileIn').click();
+  }
+});
+
+main.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'dateIn' && t.value) { date = t.value; render(); }
+  else if (t.id === 'flipIn') { cur().flip = t.checked; save(); render(); }
+  else if (t.id === 'fileIn') { importFile(t.files[0]); t.value = ''; }
+});
+
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  view = b.dataset.view; picked = null; render(); main.scrollTop = 0;
+});
+$('#secBtn').addEventListener('click', () => { view = 'classes'; render(); });
+
+// roll the date forward if the app stays open overnight
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const t = todayStr();
+  if (t !== lastToday) { if (date === lastToday) date = t; lastToday = t; render(); }
+});
+
+render();
+
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
