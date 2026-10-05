@@ -16,12 +16,14 @@
 :root{
   --paper:#EEF1EC; --surface:#FFFFFF; --line:#CBD4CD; --ink:#1C2A25; --muted:#66756E;
   --board:#24443A; --board-ink:#E8F0EA; --absent:#C23B33; --accent:#2F6B57; --empty:#E3E8E4;
+  --late:#E3A21A; --late-ink:#2A1E00; --excused:#2F63B8;
   color-scheme:light dark;
 }
 @media (prefers-color-scheme:dark){
   :root{
     --paper:#121A17; --surface:#1C2723; --line:#2E3C36; --ink:#E6EEE9; --muted:#93A39B;
     --board:#1F3D33; --board-ink:#E8F0EA; --absent:#E0564C; --accent:#6FB79A; --empty:#17201C;
+    --late:#F0B43C; --late-ink:#2A1E00; --excused:#5B8FE0;
   }
 }
 *{box-sizing:border-box}
@@ -96,7 +98,18 @@ nav.tabs button.on{color:var(--accent);font-weight:700}
   touch-action:manipulation;transition:transform .08s,background-color .12s;
 }
 .seat:active{transform:scale(.94)}
+.seat{position:relative;-webkit-touch-callout:none}
 .seat.absent{background:var(--absent);border-color:var(--absent);color:#fff}
+.seat.late{background:var(--late);border-color:var(--late);color:var(--late-ink)}
+.seat.excused{background:var(--excused);border-color:var(--excused);color:#fff}
+.seat[data-tag]::after{content:attr(data-tag);position:absolute;top:2px;right:3px;font-size:9px;font-weight:800;opacity:.9}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted);margin:2px 0 4px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+.pill.late{background:var(--late);color:var(--late-ink)}
+.pill.excused{background:var(--excused)}
+h3.late{color:var(--late)}
+@media (prefers-color-scheme:light){h3.late{color:#9A6A00}}
+h3.excused{color:var(--excused)}
 .seat.empty{background:var(--empty);border-style:dashed;border-bottom-width:1px;color:var(--muted);font-size:18px;font-weight:400}
 .seat.picked{outline:3px solid var(--accent);outline-offset:1px}
 .seat span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%;flex:none;word-break:break-word}
@@ -141,6 +154,9 @@ ul{list-style:none;margin:0;padding:0}
 .rec-head{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:16px 0 0;padding-bottom:6px;border-bottom:1px solid var(--line)}
 .count{min-width:28px;text-align:center;color:var(--muted)}
 .count.has{color:var(--absent)}
+.rec-counts{display:flex;gap:6px}
+.rec-counts .count{font-size:13px;min-width:34px;border-radius:6px;padding:1px 4px}
+.c-a.has{color:var(--absent)} .c-l.has{color:var(--late)} .c-e.has{color:var(--excused)}
 
 .classes li{display:flex;align-items:center;border-bottom:1px solid var(--line)}
 .cls{flex:1;text-align:left;background:none;border:0;padding:12px 0;display:flex;flex-direction:column}
@@ -162,6 +178,17 @@ dialog textarea{resize:vertical}
 .dlg-actions{display:flex;flex-direction:row-reverse;gap:10px;margin-top:14px}
 .dlg-actions .btn{flex:1}
 
+.sexpick{display:flex;gap:8px;margin-top:10px}
+.sexpick label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:9px;font-weight:600}
+.sexpick input{accent-color:var(--accent);width:18px;height:18px;margin:0;padding:0;flex:none}
+.sexpick[hidden]{display:none}
+.sexpick label:has(input:checked){border-color:var(--accent);color:var(--accent)}
+.sf2{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 18px}
+.sf2 h2{margin:0 0 2px;font-size:17px}
+.sf2 p{margin:0 0 10px}
+.sf2 .month{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--paper);margin-bottom:10px}
+.field{display:block;font-size:13px;color:var(--muted);margin:0 0 10px}
+.field input{margin-top:4px}
 #toast{
   position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
   transform:translate(-50%,20px);opacity:0;pointer-events:none;
@@ -194,13 +221,34 @@ dialog textarea{resize:vertical}
     <p id="dlgMsg"></p>
     <input id="dlgInput" autocomplete="off" autocapitalize="words">
     <textarea id="dlgArea" rows="8" autocapitalize="words"></textarea>
+    <div class="sexpick" id="dlgSex">
+      <label><input type="radio" name="sex" value="M"> Male</label>
+      <label><input type="radio" name="sex" value="F"> Female</label>
+    </div>
     <div class="dlg-actions">
       <button value="ok" class="btn primary" id="dlgOk">Save</button>
       <button value="cancel" class="btn" formnovalidate>Cancel</button>
     </div>
   </form>
 </dialog>
+<dialog id="schoolDlg">
+  <form method="dialog">
+    <h2>School details for SF2</h2>
+    <p>These fill the header of the form. School ID and name apply to all classes.</p>
+    <label class="field">School ID<input id="sdId" inputmode="numeric" autocomplete="off"></label>
+    <label class="field">Name of school<input id="sdName" autocomplete="off"></label>
+    <label class="field">School year (leave blank to fill it in from the month)<input id="sdYear" placeholder="2026-2027" autocomplete="off"></label>
+    <label class="field">Grade level of this class<input id="sdGrade" placeholder="Grade 7" autocomplete="off"></label>
+    <label class="field">Section of this class<input id="sdSection" autocomplete="off"></label>
+    <div class="dlg-actions">
+      <button value="ok" class="btn primary">Save</button>
+      <button value="cancel" class="btn" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
 <div id="toast" role="status" aria-live="polite"></div>
+<script src="jszip.min.js"></script>
+<script src="sf2.js"></script>
 
 <script>
 const KEY = 'seatcheck-data-v1';
@@ -222,6 +270,15 @@ const seatLabel = n => { const k = n.indexOf(','); return k > 0
   : `<span>${esc(n)}</span>`; };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const ST = { A: { cls: 'absent', word: 'Absent', tag: '' }, L: { cls: 'late', word: 'Late', tag: 'L' }, E: { cls: 'excused', word: 'Excused', tag: 'E' } };
+
+// older versions stored each day as a list of absent ids; convert to { id: 'A' | 'L' | 'E' }
+function migrate(d) {
+  for (const sec of d.sections) for (const k in sec.att)
+    if (Array.isArray(sec.att[k])) sec.att[k] = Object.fromEntries(sec.att[k].map(id => [id, 'A']));
+  return d;
+}
+
 function blankSection(name, rows = 5, cols = 6) {
   return { id: uid(), name, rows, cols, flip: false, students: {}, seats: Array(rows * cols).fill(null), att: {} };
 }
@@ -230,7 +287,7 @@ function blankSection(name, rows = 5, cols = 6) {
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.sections) && d.sections.length) return d; }
+    if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.sections) && d.sections.length) return migrate(d); }
   } catch (e) {}
   const s = blankSection('My first class');
   return { version: 1, sections: [s], current: s.id };
@@ -246,15 +303,16 @@ let date = todayStr();
 let lastToday = date;
 let seatMode = 'edit';
 let picked = null;
+let sf2Month = '';
 
 const cur = () => S.sections.find(x => x.id === S.current) || S.sections[0];
-const hasHistory = (sec, id) => Object.values(sec.att).some(a => a.includes(id));
+const hasHistory = (sec, id) => Object.values(sec.att).some(a => id in a);
 
 /* ---------- UI bits ---------- */
 let tt;
 function toast(m) {
   const t = $('#toast'); t.textContent = m; t.classList.add('show');
-  clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2400);
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), m.length > 60 ? 6000 : 2400);
 }
 
 function ask(o) {
@@ -263,18 +321,23 @@ function ask(o) {
     $('#dlgTitle').textContent = o.title;
     $('#dlgMsg').textContent = o.msg || ''; $('#dlgMsg').hidden = !o.msg;
     inp.hidden = !!o.multiline; ar.hidden = !o.multiline;
+    const sx = $('#dlgSex'); sx.hidden = o.sex === undefined;
+    sx.querySelectorAll('input').forEach(r => r.checked = r.value === o.sex);
     const f = o.multiline ? ar : inp;
     f.value = o.value || ''; f.placeholder = o.placeholder || '';
     $('#dlgOk').textContent = o.ok || 'Save';
     d.returnValue = '';
-    d.onclose = () => res(d.returnValue === 'ok' ? f.value : null);
+    d.onclose = () => {
+      ask.sex = (sx.querySelector('input:checked') || {}).value || '';
+      res(d.returnValue === 'ok' ? f.value : null);
+    };
     d.showModal();
     setTimeout(() => f.focus(), 60);
   });
 }
 
-async function shareFile(name, text, type) {
-  const blob = new Blob([text], { type });
+async function shareFile(name, data, type) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type });
   const touch = navigator.maxTouchPoints > 1;
   try {
     const file = new File([blob], name, { type });
@@ -313,18 +376,24 @@ function gridHTML(sec, cell) {
 }
 
 function renderCheck(sec) {
-  const absent = new Set(sec.att[date] || []);
+  const day = sec.att[date] || {};
   const ids = sec.seats.filter(Boolean);
   const total = ids.length;
-  const absIds = ids.filter(id => absent.has(id));
+  const by = { A: [], L: [], E: [] };
+  ids.forEach(id => { if (day[id]) by[day[id]].push(sec.students[id].name); });
+  Object.values(by).forEach(l => l.sort((a, b) => a.localeCompare(b)));
+  const present = total - by.A.length - by.E.length;   // late students are present
   const saved = sec.att[date] !== undefined;
   const grid = gridHTML(sec, i => {
     const id = sec.seats[i];
     if (!id) return `<button class="seat empty" data-i="${i}" aria-label="Empty seat"></button>`;
-    const a = absent.has(id);
-    return `<button class="seat${a ? ' absent' : ''}" data-i="${i}" aria-pressed="${a}">${seatLabel(sec.students[id].name)}</button>`;
+    const st = ST[day[id]];
+    return `<button class="seat${st ? ' ' + st.cls : ''}" data-i="${i}"${st && st.tag ? ` data-tag="${st.tag}"` : ''} aria-label="${esc(sec.students[id].name)}${st ? ', ' + st.word : ''}">${seatLabel(sec.students[id].name)}</button>`;
   });
-  const absNames = absIds.map(id => sec.students[id].name).sort((a, b) => a.localeCompare(b));
+  const pills = ['A', 'L', 'E'].filter(k => by[k].length)
+    .map(k => `<span class="pill ${ST[k].cls}">${by[k].length} ${ST[k].word.toLowerCase()}</span>`).join('');
+  const lists = ['A', 'L', 'E'].filter(k => by[k].length)
+    .map(k => `<h3 class="${ST[k].cls}">${ST[k].word}</h3><p class="names">${by[k].map(esc).join('; ')}</p>`).join('');
   return `
   <div class="datebar">
     <button class="icon-btn" data-act="prev" aria-label="Previous day">‹</button>
@@ -333,15 +402,16 @@ function renderCheck(sec) {
   </div>
   ${date !== todayStr() ? '<button class="today" data-act="today">Go to today</button>' : ''}
   ${total
-    ? `<p class="summary"><span><strong>${total - absIds.length}</strong> of ${total} present</span>${absIds.length ? `<span class="pill">${absIds.length} absent</span>` : ''}</p>`
+    ? `<p class="summary"><span><strong>${present}</strong> of ${total} present</span>${pills}</p>
+       <div class="legend"><span><i style="background:var(--absent)"></i>Tap: absent</span><span><i style="background:var(--late)"></i>Double-tap: late</span><span><i style="background:var(--excused)"></i>Hold: excused</span></div>`
     : `<p class="summary muted">No students yet. Add names in the Seats tab.</p>`}
   ${grid}
   <div class="after">
-    ${absNames.length ? `<h3>Absent</h3><p class="names">${absNames.map(esc).join('; ')}</p>` : ''}
+    ${lists}
     ${total ? (saved
-      ? `<p class="muted small">Saved for this day. Tap a seat again to undo.</p>`
+      ? `<p class="muted small">Saved for this day. Tap a marked seat to clear it.</p>`
       : `<button class="btn primary wide" data-act="saveday">Save as all present</button>
-         <p class="muted small">Tap a seat to mark a student absent. The day saves automatically.</p>`) : ''}
+         <p class="muted small">Unmarked students count as present. The day saves automatically.</p>`) : ''}
   </div>`;
 }
 
@@ -362,7 +432,7 @@ function renderSeats(sec) {
   <p class="muted small hint">${hint}</p>
   ${grid}
   <div class="after">
-    <button class="btn wide" data-act="fill">Fill empty seats from a list</button>
+    <button class="btn wide" data-act="fill">Paste names from a list</button>
     <div class="steppers">
       <div class="stepper"><span>Rows</span><button class="icon-btn" data-act="rows-" aria-label="Fewer rows">−</button><b>${sec.rows}</b><button class="icon-btn" data-act="rows+" aria-label="More rows">+</button></div>
       <div class="stepper"><span>Columns</span><button class="icon-btn" data-act="cols-" aria-label="Fewer columns">−</button><b>${sec.cols}</b><button class="icon-btn" data-act="cols+" aria-label="More columns">+</button></div>
@@ -376,15 +446,28 @@ function renderRecords(sec) {
   const dates = Object.keys(sec.att).sort();
   if (!dates.length) return `<p class="empty-note">No attendance saved yet for ${esc(sec.name)}.<br>Check attendance first, then your records show up here.</p>`;
   const ids = Object.keys(sec.students).filter(id => sec.seats.includes(id) || hasHistory(sec, id));
-  const rows = ids.map(id => ({ name: sec.students[id].name, ds: dates.filter(d => sec.att[d].includes(id)) }))
-    .sort((a, b) => b.ds.length - a.ds.length || a.name.localeCompare(b.name));
+  const rows = ids.map(id => {
+    const r = { name: sec.students[id].name, A: [], L: [], E: [] };
+    dates.forEach(d => { const m = sec.att[d][id]; if (m) r[m].push(d); });
+    return r;
+  }).sort((a, b) => (b.A.length + b.E.length) - (a.A.length + a.E.length) || b.L.length - a.L.length || a.name.localeCompare(b.name));
+  const detail = r => ['A', 'L', 'E'].filter(k => r[k].length).map(k => `${ST[k].word}: ${r[k].map(shortDate).join(', ')}`).join('<br>');
   return `
+  <section class="sf2">
+    <h2>School Form 2</h2>
+    <p class="muted small">Fills the DepEd SF2 with this class's attendance for the month you pick.</p>
+    <input type="month" class="month" id="sf2Month" value="${sf2Month || dates[dates.length - 1].slice(0, 7)}" aria-label="Month for SF2">
+    <div class="row">
+      <button class="btn primary" data-act="sf2">Download SF2</button>
+      <button class="btn" data-act="school">School details</button>
+    </div>
+  </section>
   <p class="summary" style="margin-top:0"><span><strong>${dates.length}</strong> day${dates.length > 1 ? 's' : ''} checked</span></p>
-  <button class="btn primary wide" data-act="csv">Export to CSV (Excel)</button>
-  <div class="rec-head"><span>Student</span><span>Absences</span></div>
+  <button class="btn wide" data-act="csv">Export to CSV (Excel)</button>
+  <div class="rec-head"><span>Student</span><span class="rec-counts"><span class="count">Abs</span><span class="count">Late</span><span class="count">Exc</span></span></div>
   <ul class="rec">${rows.map(r => `<li>
-    <div class="rec-top"><span>${esc(r.name)}</span><span class="count${r.ds.length ? ' has' : ''}">${r.ds.length}</span></div>
-    ${r.ds.length ? `<div class="muted small">${r.ds.map(shortDate).join(', ')}</div>` : ''}
+    <div class="rec-top"><span>${esc(r.name)}</span><span class="rec-counts">${['A', 'L', 'E'].map(k => `<span class="count c-${k.toLowerCase()}${r[k].length ? ' has' : ''}">${r[k].length}</span>`).join('')}</span></div>
+    ${detail(r) ? `<div class="muted small">${detail(r)}</div>` : ''}
   </li>`).join('')}</ul>`;
 }
 
@@ -393,6 +476,7 @@ function renderClasses() {
   <h2 class="h" style="margin-top:0">Classes</h2>
   <ul class="classes">${S.sections.map(s => `<li class="${s.id === S.current ? 'on' : ''}">
     <button class="cls" data-act="pick" data-id="${s.id}"><span>${esc(s.name)}</span><small>${s.seats.filter(Boolean).length} students</small></button>
+    <button class="link" data-act="paste" data-id="${s.id}">Paste names</button>
     <button class="link" data-act="rename" data-id="${s.id}">Rename</button>
     <button class="link danger" data-act="del" data-id="${s.id}">Delete</button>
   </li>`).join('')}</ul>
@@ -409,13 +493,98 @@ function renderClasses() {
 }
 
 /* ---------- actions ---------- */
-function tapCheck(sec, i) {
+function setMark(sec, i, mark) {
+  const id = sec.seats[i];
+  if (!id) return;
+  const day = sec.att[date] || (sec.att[date] = {});
+  if (mark) day[id] = mark; else delete day[id];
+  save(); render();
+}
+
+// one tap: absent (or clear if already marked) · double tap: late · hold: excused
+let lastTap = { i: -1, t: 0 }, holdTimer = null, held = false, downAt = null;
+function onTap(sec, i) {
   const id = sec.seats[i];
   if (!id) return toast('Empty seat');
-  const arr = sec.att[date] || (sec.att[date] = []);
-  const k = arr.indexOf(id);
-  k >= 0 ? arr.splice(k, 1) : arr.push(id);
-  save(); render();
+  const now = Date.now();
+  if (lastTap.i === i && now - lastTap.t < 350) {
+    lastTap = { i: -1, t: 0 };
+    return setMark(sec, i, 'L');
+  }
+  lastTap = { i, t: now };
+  const day = sec.att[date] || {};
+  setMark(sec, i, day[id] ? null : 'A');
+}
+
+main.addEventListener('pointerdown', e => {
+  const seat = e.target.closest('.seat');
+  if (view !== 'check' || !seat || !e.isPrimary) return;
+  held = false; downAt = { x: e.clientX, y: e.clientY, i: +seat.dataset.i };
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => {
+    const sec = cur();
+    if (!sec.seats[downAt.i]) return;
+    held = true; lastTap = { i: -1, t: 0 };
+    if (navigator.vibrate) navigator.vibrate(30);
+    setMark(sec, downAt.i, 'E');
+  }, 550);
+});
+main.addEventListener('pointermove', e => {
+  if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 10) { clearTimeout(holdTimer); downAt = null; }
+});
+['pointerup', 'pointercancel'].forEach(t => main.addEventListener(t, e => {
+  clearTimeout(holdTimer);
+  if (t === 'pointerup' && downAt && !held && view === 'check') {
+    const seat = e.target.closest('.seat');
+    if (seat && +seat.dataset.i === downAt.i) onTap(cur(), downAt.i);
+  }
+  downAt = null;
+}));
+main.addEventListener('contextmenu', e => { if (view === 'check' && e.target.closest('.seat')) e.preventDefault(); });
+
+/* turn pasted text into "Surname, First name" entries; handles Excel columns,
+   numbering, and MALE / FEMALE header lines (kept for the SF2) */
+function parseNames(text) {
+  const out = []; let sex = '';
+  for (let line of text.split(/\r?\n/)) {
+    const head = line.trim().toUpperCase().replace(/[^A-Z]/g, '');
+    if (/^(MALE|BOYS?)$/.test(head)) { sex = 'M'; continue; }
+    if (/^(FEMALE|GIRLS?)$/.test(head)) { sex = 'F'; continue; }
+    let cells = line.split('\t').map(c => c.trim()).filter(Boolean);
+    if (cells.length > 1 && /^\d+\.?$/.test(cells[0])) cells.shift();
+    if (!cells.length) continue;
+    let name = cells.length > 1 ? `${cells[0].replace(/,$/, '')}, ${cells.slice(1).join(' ')}` : cells[0];
+    name = name.replace(/^\d+[.)]?\s+/, '').replace(/\s+/g, ' ').trim();
+    if (!name || /^(TOTAL|NAME|LEARNER)/i.test(name)) continue;
+    out.push({ name, sex });
+  }
+  return out;
+}
+
+async function pasteNames(sec) {
+  const v = await ask({
+    title: `Paste names for ${sec.name}`,
+    msg: 'One name per line, or copy the name columns straight from Excel. Add a line saying MALE or FEMALE before each group if you like. Names fill empty seats from the front row, left to right.',
+    multiline: true, ok: 'Add names', placeholder: 'MALE\nDela Cruz, Juan\nFEMALE\nSantos, Maria'
+  });
+  if (v === null) return;
+  const list = parseNames(v);
+  if (!list.length) return toast('No names found in what you pasted');
+  const existing = new Set(Object.values(sec.students).map(s => s.name.toLowerCase()));
+  const fresh = list.filter(n => !existing.has(n.name.toLowerCase()));
+  const skipped = list.length - fresh.length;
+  const free = sec.seats.filter(x => !x).length;
+  if (fresh.length > free) {               // add rows so everyone fits
+    const rows = Math.min(12, sec.rows + Math.ceil((fresh.length - free) / sec.cols));
+    resize(sec, rows, sec.cols);
+  }
+  let k = 0;
+  for (let i = 0; i < sec.seats.length && k < fresh.length; i++) {
+    if (!sec.seats[i]) { const nid = uid(); sec.students[nid] = fresh[k++]; sec.seats[i] = nid; }
+  }
+  save(); view = 'seats'; seatMode = 'edit'; render();
+  const left = fresh.length - k;
+  toast([`${k} added`, skipped && `${skipped} already in the class`, left && `${left} didn't fit`].filter(Boolean).join(', '));
 }
 
 async function tapSeat(sec, i) {
@@ -433,14 +602,15 @@ async function tapSeat(sec, i) {
     title: id ? 'Edit student' : 'Add student',
     msg: `Row ${r}, seat ${c}. Leave blank to empty this seat.`,
     value: id ? sec.students[id].name : '',
-    placeholder: 'e.g. Dela Cruz, Juan'
+    placeholder: 'e.g. Dela Cruz, Juan',
+    sex: id ? (sec.students[id].sex || '') : ''
   });
   if (v === null) return;
   const name = v.trim();
   if (!name) {
     if (id) { sec.seats[i] = null; if (!hasHistory(sec, id)) delete sec.students[id]; }
-  } else if (id) sec.students[id].name = name;
-  else { const nid = uid(); sec.students[nid] = { name }; sec.seats[i] = nid; }
+  } else if (id) { sec.students[id].name = name; sec.students[id].sex = ask.sex; }
+  else { const nid = uid(); sec.students[nid] = { name, sex: ask.sex }; sec.seats[i] = nid; }
   save(); render();
 }
 
@@ -461,15 +631,47 @@ function exportCSV(sec) {
   const ids = Object.keys(sec.students).filter(id => sec.seats.includes(id) || hasHistory(sec, id))
     .sort((a, b) => sec.students[a].name.localeCompare(sec.students[b].name));
   const q = v => /[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v;
-  const lines = [['Student', 'Seat', 'Absences', ...dates].map(q).join(',')];
+  const lines = [['Student', 'Sex', 'Seat', 'Absent', 'Late', 'Excused', ...dates].map(q).join(',')];
   for (const id of ids) {
     const i = sec.seats.indexOf(id);
     const seat = i >= 0 ? `Row ${Math.floor(i / sec.cols) + 1} Seat ${(i % sec.cols) + 1}` : '';
-    const marks = dates.map(d => sec.att[d].includes(id) ? 'A' : 'P');
-    lines.push([sec.students[id].name, seat, marks.filter(m => m === 'A').length, ...marks].map(q).join(','));
+    const marks = dates.map(d => sec.att[d][id] || 'P');
+    const n = m => marks.filter(x => x === m).length;
+    lines.push([sec.students[id].name, sec.students[id].sex || '', seat, n('A'), n('L'), n('E'), ...marks].map(q).join(','));
   }
   const safe = sec.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'class';
   shareFile(`${safe}-attendance-${todayStr()}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv');
+}
+
+function schoolDetails(sec) {
+  return new Promise(res => {
+    const d = $('#schoolDlg'), sc = S.school || {}, c = sec.sf2 || {};
+    $('#sdId').value = sc.id || ''; $('#sdName').value = sc.name || ''; $('#sdYear').value = sc.year || '';
+    $('#sdGrade').value = c.grade || ''; $('#sdSection').value = c.section || sec.name;
+    d.returnValue = '';
+    d.onclose = () => {
+      if (d.returnValue === 'ok') {
+        S.school = { id: $('#sdId').value.trim(), name: $('#sdName').value.trim(), year: $('#sdYear').value.trim() };
+        sec.sf2 = { grade: $('#sdGrade').value.trim(), section: $('#sdSection').value.trim() };
+        save(); toast('School details saved');
+      }
+      res(d.returnValue === 'ok');
+    };
+    d.showModal();
+  });
+}
+
+async function downloadSF2(sec) {
+  const ym = sf2Month || ($('#sf2Month') || {}).value;
+  if (!ym) return toast('Pick a month first');
+  if (!S.school || !S.school.name) { if (!(await schoolDetails(sec))) return; }
+  try {
+    toast('Preparing SF2…');
+    const blob = await SF2.build(S, sec, ym);
+    const [y, m] = ym.split('-').map(Number);
+    const safe = (sec.sf2 && sec.sf2.section || sec.name).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'class';
+    await shareFile(`SF2-${safe}-${SF2.MONTHS[m - 1]}-${y}.xlsx`, blob, blob.type);
+  } catch (e) { toast(e.message || 'Could not make the SF2'); }
 }
 
 function importFile(f) {
@@ -480,7 +682,7 @@ function importFile(f) {
       const d = JSON.parse(rd.result);
       if (!d || !Array.isArray(d.sections) || !d.sections.length) throw 0;
       if (!confirm('Replace all classes and attendance on this device with this backup?')) return;
-      S = d;
+      S = migrate(d);
       if (!S.sections.find(s => s.id === S.current)) S.current = S.sections[0].id;
       save(); render(); toast('Backup imported');
     } catch (e) { toast('That file is not a SeatCheck backup'); }
@@ -493,7 +695,7 @@ main.addEventListener('click', async e => {
   const seat = e.target.closest('.seat');
   if (seat) {
     const i = +seat.dataset.i;
-    if (view === 'check') return tapCheck(sec, i);
+    if (view === 'check') { if (e.detail === 0) setMark(sec, i, (sec.att[date] || {})[sec.seats[i]] ? null : 'A'); return; }
     if (view === 'seats') return tapSeat(sec, i);
     return;
   }
@@ -504,7 +706,7 @@ main.addEventListener('click', async e => {
     case 'prev': date = shiftDate(date, -1); return render();
     case 'next': date = shiftDate(date, 1); return render();
     case 'today': date = todayStr(); return render();
-    case 'saveday': sec.att[date] = []; save(); toast('Saved as all present'); return render();
+    case 'saveday': sec.att[date] = {}; save(); toast('Saved as all present'); return render();
     case 'mode-edit': seatMode = 'edit'; picked = null; return render();
     case 'mode-swap': seatMode = 'swap'; picked = null; return render();
     case 'rows-': case 'rows+': case 'cols-': case 'cols+': {
@@ -514,23 +716,11 @@ main.addEventListener('click', async e => {
       if (resize(sec, rows, cols)) { picked = null; save(); render(); }
       return;
     }
-    case 'fill': {
-      const v = await ask({
-        title: 'Fill empty seats',
-        msg: 'Paste one name per line, like a column copied from Excel. Names fill empty seats from the front row, left to right.',
-        multiline: true, ok: 'Fill seats', placeholder: 'Dela Cruz, Juan\nSantos, Maria'
-      });
-      if (v === null) return;
-      const names = v.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      let k = 0;
-      for (let i = 0; i < sec.seats.length && k < names.length; i++) {
-        if (!sec.seats[i]) { const nid = uid(); sec.students[nid] = { name: names[k++] }; sec.seats[i] = nid; }
-      }
-      save(); render();
-      const left = names.length - k;
-      return toast(left ? `${k} added. ${left} didn't fit, so add more rows or columns.` : `${k} students added`);
-    }
+    case 'fill': return pasteNames(sec);
+    case 'paste': { S.current = id; save(); return pasteNames(cur()); }
     case 'csv': return exportCSV(sec);
+    case 'school': return schoolDetails(sec);
+    case 'sf2': return downloadSF2(sec);
     case 'pick': S.current = id; save(); view = 'check'; return render();
     case 'rename': {
       const s = S.sections.find(x => x.id === id);
@@ -551,8 +741,7 @@ main.addEventListener('click', async e => {
       if (!v || !v.trim()) return;
       const s = blankSection(v.trim());
       S.sections.push(s); S.current = s.id; save();
-      view = 'seats'; seatMode = 'edit'; render();
-      return toast('Class added. Now set up the seats.');
+      return pasteNames(s);
     }
     case 'export': {
       const ok = await shareFile(`seatcheck-backup-${todayStr()}.json`, JSON.stringify(S), 'application/json');
@@ -566,6 +755,7 @@ main.addEventListener('click', async e => {
 main.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'dateIn' && t.value) { date = t.value; render(); }
+  else if (t.id === 'sf2Month') sf2Month = t.value;
   else if (t.id === 'flipIn') { cur().flip = t.checked; save(); render(); }
   else if (t.id === 'fileIn') { importFile(t.files[0]); t.value = ''; }
 });
