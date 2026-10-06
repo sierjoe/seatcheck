@@ -233,6 +233,10 @@ dialog textarea{resize:vertical}
 .chip{background:var(--surface)}
 .chip.done{background:var(--grad);border-color:transparent;color:#fff;box-shadow:var(--glow)}
 .chip em{font-style:normal;font-size:12px;background:rgba(255,255,255,.25);border-radius:999px;padding:0 6px}
+.size{font-size:13px;color:var(--muted);margin-top:2px}
+.size.bad{color:var(--absent);font-weight:700}
+.warnbox{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:12px 0 0;padding:10px 12px;border-radius:14px;border:1px solid rgba(210,63,58,.3);background:rgba(210,63,58,.07);font-size:14px}
+.warnbox .btn{padding:8px 12px;font-size:14px}
 .task-foot{display:flex;justify-content:space-between;align-items:center}
 .rowbtn{width:100%;background:none;border:0;padding:0;text-align:left}
 .total{font-size:18px;font-weight:700;color:var(--accent)}
@@ -277,20 +281,25 @@ body.scanning{overflow:hidden}
   body{background:#fff}
   .app,dialog,#toast,.scanner{display:none!important}
   #printArea{display:block}
-  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
-  .card{border:1px dashed #999;padding:5mm 4mm 4mm;text-align:center;break-inside:avoid;color:#000;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
-  .card img{width:52mm;height:52mm;display:block;margin:0 auto 2mm}
-  .card b{display:block;font-size:11pt}
-  .card small{display:block;font-size:8pt;color:#444}
-  .gp{color:#000;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
-  .gp h1{font-size:22pt;margin:0}
-  .gp p{margin:2mm 0 6mm;font-size:12pt;color:#333}
-  .gp-grid{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
-  .gp-box{border:1.5pt solid #000;border-radius:3mm;padding:4mm 5mm;break-inside:avoid}
-  .gp-box h2{font-size:15pt;margin:0 0 1mm;display:flex;justify-content:space-between}
-  .gp-box h2 small{font-size:10pt;font-weight:400}
-  .gp-box ol{margin:2mm 0 0;padding-left:6mm;font-size:12pt;line-height:1.5}
+  .qpage{width:190mm;height:276mm;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);break-after:page;page-break-after:always;overflow:hidden}
+  .qpage:last-child{break-after:auto;page-break-after:auto}
+  .card{border:.6pt dashed #999;margin:-.3pt;padding:3mm 3mm 2mm;text-align:center;color:#000;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;min-height:0}
+  .card img{width:48mm;height:48mm;display:block;margin:0 0 2mm}
+  .card b{display:block;font-size:10.5pt;line-height:1.2;max-width:58mm;max-height:2.4em;overflow:hidden}
+  .card small{display:block;font-size:8pt;color:#444;margin-top:.5mm}
+  html,body{height:auto!important;background:#fff!important}
 }
+/* cleaning groups sheet: sized in mm so it can be measured on screen and fitted to A4 */
+.gp{--fs:12pt;--cols:2;width:190mm;color:#000;background:#fff;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:var(--fs)}
+.gp h1{font-size:calc(var(--fs) * 1.7);margin:0}
+.gp p{margin:1.5mm 0 5mm;font-size:var(--fs);color:#333}
+.gp-grid{display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:4mm;align-items:start}
+.gp-box{border:1.2pt solid #000;border-radius:3mm;padding:3mm 4mm;break-inside:avoid;page-break-inside:avoid}
+.gp-box h2{font-size:calc(var(--fs) * 1.2);margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:3mm}
+.gp-box h2 small{font-size:calc(var(--fs) * .75);font-weight:400;white-space:nowrap}
+.gp-box ol{margin:1.5mm 0 0;padding-left:6mm;line-height:1.4;column-gap:6mm}
+.gp-box li{break-inside:avoid}
+#printArea.measure{display:block;position:fixed;left:-10000px;top:0}
 dialog select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--paper);font-size:16px;margin-top:4px;color:var(--ink)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dlg-scroll{max-height:62vh;overflow:auto;margin:0 -4px;padding:0 4px}

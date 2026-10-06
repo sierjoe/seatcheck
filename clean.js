@@ -98,7 +98,7 @@ const Clean = (() => {
     return new Promise(res => {
       const d = $('#memberDlg'), a = weekOf(sec, st.week);
       const where = sid => data(sec).tasks.find(t => t.id !== task.id && (a[t.id] || []).includes(sid));
-      $('#mbTitle').textContent = task.name;
+      $('#mbTitle').textContent = `${task.name} (${targets(sec)[task.id]} members)`;
       $('#mbList').innerHTML = roster(sec).map(sid => {
         const other = where(sid);
         return `<label class="mb"><input type="checkbox" value="${sid}" ${(a[task.id] || []).includes(sid) ? 'checked' : ''}>
@@ -129,25 +129,81 @@ const Clean = (() => {
   }
 
   /* ---------- groups ---------- */
-  function shuffle(sec) {
-    const tasks = data(sec).tasks, ids = roster(sec);
-    for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
-    const a = {}; tasks.forEach(t => a[t.id] = []);
-    // fill tasks that have a group size first; the rest go to tasks without a size (or to all tasks if every task has one)
-    let k = 0;
-    for (const t of tasks) if (t.size > 0) while (a[t.id].length < t.size && k < ids.length) a[t.id].push(ids[k++]);
-    const open = tasks.filter(t => !(t.size > 0));
-    const rest = open.length ? open : tasks;
-    for (let r = 0; k < ids.length; r++) a[rest[r % rest.length].id].push(ids[k++]);
-    data(sec).weeks[st.week] = a;
+  /* How many students each task should get.
+     Tasks with a size get exactly that many; the rest are shared evenly by tasks without a size.
+     If every task has a size, extra students are spread across tasks one at a time.
+     If there are fewer students than the sizes add up to, each group shrinks in proportion. */
+  function targets(sec, n = roster(sec).length) {
+    const tasks = data(sec).tasks, out = {};
+    const sized = tasks.filter(t => t.size > 0), open = tasks.filter(t => !(t.size > 0));
+    const S = sized.reduce((a, t) => a + t.size, 0);
+    tasks.forEach(t => out[t.id] = 0);
+    if (n >= S) {
+      sized.forEach(t => out[t.id] = t.size);
+      let rest = n - S;
+      const pool = open.length ? open : tasks;
+      for (let k = 0; rest > 0; k++, rest--) out[pool[k % pool.length].id]++;
+    } else {
+      const raw = sized.map(t => ({ t, v: t.size * n / S }));
+      raw.forEach(r => out[r.t.id] = Math.floor(r.v));
+      let left = n - raw.reduce((a, r) => a + Math.floor(r.v), 0);
+      raw.sort((x, y) => (y.v % 1) - (x.v % 1)).forEach(r => { if (left > 0) { out[r.t.id]++; left--; } });
+    }
+    return out;
   }
+  // fill tasks, in order, from a list of students
+  function fillByTargets(sec, ids) {
+    const tasks = data(sec).tasks, want = targets(sec, ids.length), a = {};
+    let k = 0;
+    tasks.forEach(t => { a[t.id] = ids.slice(k, k + want[t.id]); k += want[t.id]; });
+    return a;
+  }
+  const mixed = list => { const l = list.slice(); for (let i = l.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [l[i], l[j]] = [l[j], l[i]]; } return l; };
+
+  function shuffle(sec) {
+    data(sec).weeks[st.week] = fillByTargets(sec, mixed(roster(sec)));
+  }
+  // rotate: everyone moves on to the next task; groups are then trimmed or topped up to the right size
   function fromLastWeek(sec, rotate) {
     const tasks = data(sec).tasks, prev = data(sec).weeks[shiftDate(st.week, -7)];
     if (!prev || !Object.values(prev).some(l => l.length)) return false;
-    const a = {};
-    tasks.forEach((t, i) => { const src = rotate ? tasks[(i - 1 + tasks.length) % tasks.length] : t; a[t.id] = [...(prev[src.id] || [])]; });
-    data(sec).weeks[st.week] = a;
+    const inClass = new Set(roster(sec));
+    if (!rotate) {
+      const a = {}; tasks.forEach(t => a[t.id] = (prev[t.id] || []).filter(id => inClass.has(id)));
+      data(sec).weeks[st.week] = a;
+      return true;
+    }
+    const order = [];
+    tasks.forEach((t, i) => (prev[tasks[(i - 1 + tasks.length) % tasks.length].id] || []).forEach(id => inClass.has(id) && order.push(id)));
+    const seen = new Set(order);
+    roster(sec).forEach(id => { if (!seen.has(id)) order.push(id); });   // new students go last
+    data(sec).weeks[st.week] = fillByTargets(sec, order);
     return true;
+  }
+  // keep everyone where they are as far as possible, only moving extras into groups that are short
+  function balance(sec) {
+    const tasks = data(sec).tasks, a = weekOf(sec, st.week), want = targets(sec), inClass = new Set(roster(sec));
+    const placed = new Set(), pool = [];
+    tasks.forEach(t => {
+      const keep = (a[t.id] || []).filter(id => inClass.has(id) && !placed.has(id));
+      keep.forEach(id => placed.add(id));
+      a[t.id] = keep.slice(0, want[t.id]);
+      pool.push(...keep.slice(want[t.id]));
+    });
+    roster(sec).forEach(id => { if (!placed.has(id)) pool.push(id); });
+    const extra = mixed(pool);
+    tasks.forEach(t => { while (a[t.id].length < want[t.id] && extra.length) a[t.id].push(extra.shift()); });
+  }
+  function sizeNote(sec) {
+    const tasks = data(sec).tasks, n = roster(sec).length, S = tasks.reduce((x, t) => x + (t.size || 0), 0);
+    if (tasks.every(t => t.size > 0) && n > S) return `Shuffled. Sizes add up to ${S} but there are ${n} students, so ${n - S} extra were spread across tasks.`;
+    if (n < S) return `Shuffled. Sizes add up to ${S} but there are only ${n} students, so groups were made smaller.`;
+    return '';
+  }
+  function mismatches(sec) {
+    const a = data(sec).weeks[st.week] || {}, want = targets(sec);
+    const assigned = Object.values(a).flat().length;
+    return data(sec).tasks.filter(t => (a[t.id] || []).length !== want[t.id]).length + (assigned < roster(sec).length ? 1 : 0);
   }
 
   /* ---------- views ---------- */
@@ -169,11 +225,14 @@ const Clean = (() => {
     const days = weekDays(st.week), t = todayStr();
     const chips = days.map((d, k) => `<button class="day${d === st.day ? ' on' : ''}${d === t ? ' is-today' : ''}" data-act="cl-day" data-d="${d}">
       <span>${DOW[k]}</span><b>${toDate(d).getDate()}</b></button>`).join('');
+    const want = targets(sec), off = Object.values(a).some(l => l.length) && mismatches(sec);
     const cards = cl.tasks.map(task => {
       const mem = (a[task.id] || []);
+      const bad = Object.values(a).some(l => l.length) && mem.length !== want[task.id];
       const done = mem.filter(sid => taskEntry(sec, sid, st.day)).length;
       return `<section class="task">
         <div class="task-top"><h3>${esc(task.name)}</h3><span class="pts">${task.pts} pts</span></div>
+        <div class="size${bad ? ' bad' : ''}">${mem.length} of ${want[task.id]} members${task.size ? '' : ' (shares the rest)'}</div>
         <div class="chips">${mem.map(sid => {
           const e = taskEntry(sec, sid, st.day), p = dayPoints(sec, sid, st.day);
           return `<button class="chip${e ? ' done' : ''}" data-act="cl-chip" data-sid="${sid}">${esc(shortName(nameOf(sec, sid)))}${e ? `<em>${p > 0 ? '+' : ''}${p}</em>` : ''}</button>`;
@@ -193,6 +252,7 @@ const Clean = (() => {
         <button class="icon-btn" data-act="cl-wk" data-n="7" aria-label="Next week">›</button>
       </div>
       <div class="days">${chips}</div>
+      ${off ? `<div class="warnbox"><span>Some groups don't match the sizes in Tasks.</span><button class="btn primary" data-act="cl-balance">${ic('users')}Fix group sizes</button></div>` : ''}
       <p class="muted small hint">Tap a name to give points for ${esc(prettyDate(st.day))}. Tap again to adjust or remove.</p>
       ${cards}
       ${free.length ? `<p class="muted small"><b>Not in a group:</b> ${free.map(sid => esc(shortName(nameOf(sec, sid)))).join(', ')}</p>` : ''}
@@ -279,8 +339,10 @@ const Clean = (() => {
       case 'cl-shuffle': {
         const a = cl.weeks[st.week];
         if (a && Object.values(a).some(l => l.length) && !confirm('Replace this week\'s groups with new random groups?')) return;
-        shuffle(sec); save(); render_(); return toast('Groups shuffled');
+        shuffle(sec); save(); render_();
+        return toast(sizeNote(sec) || 'Groups shuffled');
       }
+      case 'cl-balance': balance(sec); save(); render_(); return toast('Groups now match the sizes in Tasks');
       case 'cl-rotate': case 'cl-copy': {
         const a = cl.weeks[st.week];
         if (a && Object.values(a).some(l => l.length) && !confirm('Replace this week\'s groups?')) return;
@@ -362,26 +424,52 @@ const Clean = (() => {
 
   function printGroups(sec) {
     const cl = data(sec), a = cl.weeks[st.week] || {};
-    if (!cl.tasks.some(t => (a[t.id] || []).length)) return toast('This week has no groups yet');
-    $('#printArea').innerHTML = `<div class="gp">
+    const tasks = cl.tasks.filter(t => (a[t.id] || []).length);
+    if (!tasks.length) return toast('This week has no groups yet');
+    const area = $('#printArea');
+    area.innerHTML = `<div class="gp">
       <h1>Cleaning groups</h1>
       <p>${esc(sec.name)}, week of ${esc(rangeLabel(st.week))}, ${toDate(st.week).getFullYear()}</p>
-      <div class="gp-grid">${cl.tasks.filter(t => (a[t.id] || []).length).map(t => `<section class="gp-box">
-        <h2>${esc(t.name)}<small>${t.pts} pts a day</small></h2>
+      <div class="gp-grid">${tasks.map(t => `<section class="gp-box">
+        <h2><span>${esc(t.name)}</span><small>${a[t.id].length} members, ${t.pts} pts</small></h2>
         <ol>${a[t.id].slice().sort((x, y) => nameOf(sec, x).localeCompare(nameOf(sec, y))).map(sid => `<li>${esc(nameOf(sec, sid))}</li>`).join('')}</ol>
       </section>`).join('')}</div></div>`;
+    fitA4(area);
     setTimeout(() => window.print(), 150);
+  }
+
+  // shrink the text until the sheet fits one A4 page (190 × 277 mm inside 10 mm margins)
+  function fitA4(area) {
+    const mm = 96 / 25.4, maxH = 272 * mm;
+    const gp = area.querySelector('.gp');
+    area.classList.add('measure');
+    let best = null;
+    outer: for (const cols of [2, 3]) {
+      for (let fs = 13; fs >= 7; fs -= 0.5) {
+        gp.style.setProperty('--fs', fs + 'pt');
+        gp.style.setProperty('--cols', cols);
+        gp.querySelectorAll('ol').forEach(ol => ol.style.columns = ol.children.length > (cols === 2 ? 9 : 12) ? 2 : 1);
+        if (gp.scrollHeight <= maxH) { best = { cols, fs }; break outer; }
+      }
+    }
+    if (!best) { gp.style.setProperty('--fs', '7pt'); gp.style.setProperty('--cols', 3); }
+    area.classList.remove('measure');
   }
 
   function printCards(sec) {
     const ids = roster(sec);
     if (!ids.length) return toast('Add students to this class first');
     const area = $('#printArea');
-    area.innerHTML = `<div class="cards">${ids.map(sid => {
+    // fixed A4 pages: 3 across, 4 down, 12 cards a page
+    const card = sid => {
       const n = nameOf(sec, sid), k = n.indexOf(',');
-      const mid = (k > 0 ? n.slice(0, k) : n.split(' ')[0]).trim().toUpperCase();
+      // surname when the name has one ("Dela Cruz, Juan"), otherwise the whole name, so JAY ANN and JAY AR differ
+      const mid = (k > 0 ? n.slice(0, k) : n).trim().toUpperCase();
       return `<div class="card"><img src="${qrCanvas(payload(sec, sid), mid).toDataURL()}" alt=""><b>${esc(n)}</b><small>${esc(sec.name)}</small></div>`;
-    }).join('')}</div>`;
+    };
+    const pages = [];
+    for (let i = 0; i < ids.length; i += 12) pages.push(`<div class="qpage">${ids.slice(i, i + 12).map(card).join('')}</div>`);
+    area.innerHTML = pages.join('');
     setTimeout(() => window.print(), 150);
   }
 

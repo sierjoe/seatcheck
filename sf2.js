@@ -279,6 +279,8 @@ const SF2 = (() => {
     const missing = rows.filter(r => r.st.unsorted.length).map(r => r.sec.name);
     if (missing.length) throw new Error(`Set Male or Female for every student in: ${missing.join(', ')}.`);
     if (rows.length > 15) throw new Error('SF4 has room for 15 classes.');
+    const noGrade = rows.filter(r => !String((r.sec.sf2 || {}).grade || '').trim()).map(r => r.sec.name);
+    if (noGrade.length) throw new Error(`Set the grade level for ${noGrade.join(', ')} in School details, so SF4 knows which grade row to use.`);
 
     const zip = await loadTemplate('sf4-template.xlsx');
     const sh = new Sheet(await zip.file('xl/worksheets/sheet1.xml').async('string'));
