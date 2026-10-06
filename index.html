@@ -309,6 +309,30 @@ dialog select{width:100%;border:1px solid var(--line);border-radius:10px;padding
 .tag.out{color:var(--absent)}
 .move li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .move button{background:none;border:0;padding:0;text-align:left;flex:1}
+.mb-head{display:flex;justify-content:space-between;align-items:center;margin:0 0 4px}
+.mb-head b{font-size:14px;color:var(--accent)}
+.mb small.free{color:var(--accent);font-weight:600}
+.chip.movable{border-style:dashed;gap:6px}
+.chip.movable .ic{width:14px;height:14px;opacity:.6}
+.edit-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 0}
+.edit-bar p{margin:0;flex:1}
+.edit-bar .btn{padding:8px 12px;font-size:14px;flex:none}
+.free-box{border-style:dashed}
+.note{font-size:14px;color:var(--accent);margin:10px 0 0}
+.cd-head{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+.cd-head h2{margin:0;font-size:20px;flex:1}
+.cd-stats{display:flex;gap:14px;font-size:14px;color:var(--muted);margin:0 0 12px}
+.cd-stats b{color:var(--ink)}
+.cd-stats .sx{position:static;width:13px;height:13px;opacity:.8;vertical-align:-1px;margin:0 2px 0 0}
+.mb-head{flex-wrap:wrap;gap:4px 10px}
+.stu li{border-bottom:1px solid var(--line)}
+.stu button{width:100%;background:none;border:0;padding:11px 2px;display:flex;align-items:center;gap:10px;text-align:left}
+.stu .n{flex:1}
+.stu .num{width:24px;color:var(--muted);font-size:13px;text-align:right}
+.stu .sxi{width:16px;height:16px;flex:none;color:var(--muted)}
+.stu .sxi .sx{position:static;width:14px;height:14px;opacity:.8}
+.stu .grp{font-size:12px;color:var(--muted)}
+.cls-list .cls{cursor:pointer}
 #toast{
   position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
   transform:translate(-50%,20px);opacity:0;pointer-events:none;
@@ -396,7 +420,7 @@ dialog select{width:100%;border:1px solid var(--line);border-radius:10px;padding
     <p></p>
     <label class="field">Task<input id="tkName" placeholder="e.g. Sweep the floor" autocomplete="off" autocapitalize="sentences"></label>
     <label class="field">Points a student gets each day it's done<input id="tkPts" type="number" inputmode="numeric" min="0"></label>
-    <label class="field">Students per group (leave blank to share evenly)<input id="tkSize" type="number" inputmode="numeric" min="0" placeholder="4"></label>
+    <label class="field">Group size (optional, used by Shuffle)<input id="tkSize" type="number" inputmode="numeric" min="0" placeholder="6"></label>
     <div class="dlg-actions">
       <button value="ok" class="btn primary">Save</button>
       <button value="cancel" class="btn" formnovalidate>Cancel</button>
@@ -407,7 +431,8 @@ dialog select{width:100%;border:1px solid var(--line);border-radius:10px;padding
 <dialog id="memberDlg">
   <form method="dialog">
     <h2 id="mbTitle"></h2>
-    <p>Check who does this task this week. Checking someone moves them from their other group.</p>
+    <p>Check who does this task this week. Checking someone moves them out of their other group.</p>
+    <div class="mb-head"><b id="mbCount"></b><button value="add" class="link" formnovalidate>+ Add a new student</button></div>
     <div id="mbList"></div>
     <div class="dlg-actions">
       <button value="ok" class="btn primary">Save</button>
@@ -458,6 +483,31 @@ dialog select{width:100%;border:1px solid var(--line);border-radius:10px;padding
     </div>
     <div class="dlg-actions">
       <button value="ok" class="btn primary">Save</button>
+      <button value="cancel" class="btn" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="addDlg">
+  <form method="dialog">
+    <h2>Add a student</h2>
+    <p id="adClass"></p>
+    <label class="field">Name<input id="adName" placeholder="Surname, First name" autocomplete="off" autocapitalize="words"></label>
+    <div class="sexpick" id="adSex">
+      <label><input type="radio" name="adsex" value="M"> Male</label>
+      <label><input type="radio" name="adsex" value="F"> Female</label>
+    </div>
+    <label class="field" style="margin-top:12px">How they joined
+      <select id="adHow">
+        <option value="">Already enrolled (I missed them)</option>
+        <option value="transfer">Transferee</option>
+        <option value="late">Late enrollee</option>
+      </select></label>
+    <div id="adMore">
+      <label class="field">Date they joined<input type="date" id="adDate"></label>
+      <label class="field" id="adFromWrap">From which school<input id="adFrom" autocomplete="off"></label>
+    </div>
+    <div class="dlg-actions">
+      <button value="ok" class="btn primary">Add student</button>
       <button value="cancel" class="btn" formnovalidate>Cancel</button>
     </div>
   </form>
@@ -736,10 +786,12 @@ function renderRecords(sec) {
 }
 
 function renderClasses() {
+  const open = classView && S.sections.find(x => x.id === classView);
+  if (open) return renderClassDetail(open);
   return `
   <h2 class="h" style="margin-top:0">Classes</h2>
   <ul class="classes">${S.sections.map(s => `<li class="${s.id === S.current ? 'on' : ''}">
-    <button class="cls" data-act="pick" data-id="${s.id}"><span>${esc(s.name)}</span><small>${s.seats.filter(Boolean).length} students</small></button>
+    <button class="cls" data-act="pick" data-id="${s.id}"><span>${esc(s.name)}</span><small>${s.seats.filter(Boolean).length} students. Tap to see the list.</small></button>
     <button class="link" data-act="paste" data-id="${s.id}" aria-label="Paste names">${ic('paste')}</button>
     <button class="link" data-act="rename" data-id="${s.id}" aria-label="Rename">${ic('edit')}</button>
     <button class="link danger" data-act="del" data-id="${s.id}" aria-label="Delete">${ic('trash')}</button>
@@ -846,7 +898,10 @@ async function pasteNames(sec) {
   for (let i = 0; i < sec.seats.length && k < fresh.length; i++) {
     if (!sec.seats[i]) { const nid = uid(); sec.students[nid] = fresh[k++]; sec.seats[i] = nid; }
   }
-  save(); view = 'seats'; seatMode = 'edit'; render();
+  save();
+  if (view === 'classes') classView = sec.id;   // stay on the class list
+  else { view = 'seats'; seatMode = 'edit'; }
+  render();
   const left = fresh.length - k;
   toast([`${k} added`, skipped && `${skipped} already in the class`, left && `${left} didn't fit`].filter(Boolean).join(', '));
 }
@@ -936,6 +991,86 @@ function schoolDetails(sec) {
     };
     d.showModal();
   });
+}
+
+/* add one student to a class: takes the first empty seat (adds a row if the room is full) */
+function addStudent(sec) {
+  return new Promise(res => {
+    const d = $('#addDlg');
+    $('#adClass').textContent = `To ${sec.name}. They also appear in the cleaning list.`;
+    $('#adName').value = ''; $('#adFrom').value = ''; $('#adHow').value = ''; $('#adDate').value = todayStr();
+    d.querySelectorAll('input[name=adsex]').forEach(r => r.checked = false);
+    const sync = () => { $('#adMore').hidden = !$('#adHow').value; $('#adFromWrap').hidden = $('#adHow').value !== 'transfer'; };
+    $('#adHow').onchange = sync; sync();
+    d.returnValue = '';
+    d.onclose = () => {
+      const name = $('#adName').value.trim();
+      if (d.returnValue !== 'ok' || !name) return res(null);
+      const how = $('#adHow').value, sid = uid();
+      const st = { name, sex: (d.querySelector('input[name=adsex]:checked') || {}).value || '' };
+      if (how) { st.inType = how; st.inDate = $('#adDate').value || todayStr(); if (how === 'transfer' && $('#adFrom').value.trim()) st.inFrom = $('#adFrom').value.trim(); }
+      sec.students[sid] = st;
+      let free = sec.seats.indexOf(null);
+      if (free < 0) { resize(sec, Math.min(12, sec.rows + 1), sec.cols); free = sec.seats.indexOf(null); }
+      if (free >= 0) sec.seats[free] = sid;
+      save();
+      toast(`${name} added${free >= 0 ? ', seat ' + (Math.floor(free / sec.cols) + 1) + '-' + (free % sec.cols + 1) : ''}`);
+      res(sid);
+    };
+    d.showModal();
+    setTimeout(() => $('#adName').focus(), 60);
+  });
+}
+
+/* the class's student list (Classes tab → tap a class) */
+let classView = null;
+function renderClassDetail(sec) {
+  const cleanA = (sec.clean && sec.clean.weeks && sec.clean.weeks[Clean.mondayOf(todayStr())]) || {};
+  const taskOf = sid => ((sec.clean || {}).tasks || []).find(t => (cleanA[t.id] || []).includes(sid));
+  const byName = (a, b) => sec.students[a].name.localeCompare(sec.students[b].name);
+  const current = Object.keys(sec.students).filter(id => !sec.students[id].outType).sort(byName);
+  const left = Object.keys(sec.students).filter(id => sec.students[id].outType).sort(byName);
+  const nM = current.filter(id => sec.students[id].sex === 'M').length, nF = current.filter(id => sec.students[id].sex === 'F').length;
+  const row = (id, k) => { const st = sec.students[id], t = taskOf(id), mv = moveLabel(st);
+    return `<li><button data-act="cls-stu" data-sid="${id}">
+      <span class="num">${k + 1}</span><span class="sxi">${SEX_ICON[st.sex] || ''}</span>
+      <span class="n">${esc(st.name)}${mv ? `<span class="tag${st.outType ? ' out' : ''}">${esc(mv)}</span>` : ''}<br>
+      <span class="grp">${!sec.seats.includes(id) && !st.outType ? 'No seat yet' : t ? 'Cleaning: ' + esc(t.name) : ''}</span></span>${ic('edit')}</button></li>`; };
+  return `
+  <div class="cd-head"><button class="icon-btn" data-act="cls-back" aria-label="Back to classes">‹</button><h2>${esc(sec.name)}</h2></div>
+  <div class="cd-stats"><span><b>${current.length}</b> students</span><span>${SEX_ICON.M} <b>${nM}</b></span><span>${SEX_ICON.F} <b>${nF}</b></span></div>
+  <div class="row">
+    <button class="btn primary" data-act="cls-add">${ic('plus')}Add student</button>
+    <button class="btn" data-act="paste" data-id="${sec.id}">${ic('paste')}Paste names</button>
+  </div>
+  <ul class="stu" style="margin-top:12px">${current.map(row).join('') || '<p class="muted small">No students yet.</p>'}</ul>
+  ${left.length ? `<h2 class="h">Left the class</h2><ul class="stu">${left.map(row).join('')}</ul>` : ''}
+  <button class="btn wide" data-act="cls-open" style="margin-top:16px">${ic('check')}Open attendance for ${esc(sec.name)}</button>`;
+}
+
+async function studentMenu(sec, sid) {
+  const st = sec.students[sid];
+  const v = await Clean.choose(st.name, '', [
+    { label: 'Edit name or Male/Female', value: 'edit', cls: 'span' },
+    { label: 'Transfer, drop out, or late enrollee status', value: 'status', cls: 'span' },
+    { label: 'Remove from this class', value: 'del', cls: 'span neg' }
+  ]);
+  if (v === 'edit') {
+    const n = await ask({ title: 'Edit student', value: st.name, sex: st.sex || '' });
+    if (n && n.trim()) { st.name = n.trim(); st.sex = ask.sex; save(); }
+  }
+  if (v === 'status') return editMovement(sec, sid);
+  if (v === 'del') {
+    if (hasHistory(sec, sid)) {
+      if (!confirm(`${st.name} already has attendance records. Remove anyway? Their records will be deleted too. If they transferred or dropped out, use the status option instead so SF2 and SF4 stay correct.`)) return render();
+    } else if (!confirm(`Remove ${st.name} from ${sec.name}?`)) return render();
+    const i = sec.seats.indexOf(sid); if (i >= 0) sec.seats[i] = null;
+    delete sec.students[sid];
+    for (const day of Object.values(sec.att)) delete day[sid];
+    if (sec.clean) { for (const w of Object.values(sec.clean.weeks)) for (const k in w) w[k] = w[k].filter(x => x !== sid); sec.clean.log = sec.clean.log.filter(e => e.sid !== sid); }
+    save(); toast(`${st.name} removed`);
+  }
+  render();
 }
 
 function movementList(sec) {
@@ -1063,7 +1198,11 @@ main.addEventListener('click', async e => {
     case 'school': return schoolDetails(sec);
     case 'sf2': return downloadSF2(sec);
     case 'sf4': return downloadSF4(sec);
-    case 'pick': S.current = id; save(); view = 'check'; return render();
+    case 'pick': S.current = id; classView = id; save(); main.scrollTop = 0; return render();
+    case 'cls-back': classView = null; return render();
+    case 'cls-open': classView = null; view = 'check'; return render();
+    case 'cls-add': { const sid = await addStudent(sec); if (sid) render(); return; }
+    case 'cls-stu': return studentMenu(sec, b.dataset.sid);
     case 'rename': {
       const s = S.sections.find(x => x.id === id);
       const v = await ask({ title: 'Rename class', value: s.name });
@@ -1083,6 +1222,7 @@ main.addEventListener('click', async e => {
       if (!v || !v.trim()) return;
       const s = blankSection(v.trim());
       S.sections.push(s); S.current = s.id; save();
+      classView = s.id;
       return pasteNames(s);
     }
     case 'export': {
@@ -1104,9 +1244,10 @@ main.addEventListener('change', e => {
 
 document.querySelector('.tabs').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.view === 'classes' && view === 'classes') classView = null;
   view = b.dataset.view; picked = null; render(); main.scrollTop = 0;
 });
-$('#secBtn').addEventListener('click', () => { view = 'classes'; render(); });
+$('#secBtn').addEventListener('click', () => { view = 'classes'; classView = null; render(); });
 
 // roll the date forward if the app stays open overnight
 document.addEventListener('visibilitychange', () => {

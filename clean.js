@@ -6,7 +6,7 @@
    A student earns task points at most once per day; adjustments can be added any number of times. */
 
 const Clean = (() => {
-  const st = { sub: 'week', week: null, day: null, period: 'week' };
+  const st = { sub: 'week', week: null, day: null, period: 'week', edit: false };
   const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
   const data = sec => sec.clean || (sec.clean = { tasks: [], weeks: {}, log: [] });
@@ -94,20 +94,58 @@ const Clean = (() => {
     });
   }
 
-  function pickMembers(sec, task) {
-    return new Promise(res => {
-      const d = $('#memberDlg'), a = weekOf(sec, st.week);
-      const where = sid => data(sec).tasks.find(t => t.id !== task.id && (a[t.id] || []).includes(sid));
-      $('#mbTitle').textContent = `${task.name} (${targets(sec)[task.id]} members)`;
-      $('#mbList').innerHTML = roster(sec).map(sid => {
-        const other = where(sid);
-        return `<label class="mb"><input type="checkbox" value="${sid}" ${(a[task.id] || []).includes(sid) ? 'checked' : ''}>
-          <span>${esc(nameOf(sec, sid))}</span>${other ? `<small>${esc(other.name)}</small>` : ''}</label>`;
-      }).join('') || '<p class="muted small">No students in this class yet.</p>';
-      d.returnValue = '';
-      d.onclose = () => res(d.returnValue === 'ok' ? [...$('#mbList').querySelectorAll('input:checked')].map(i => i.value) : null);
-      d.showModal();
-    });
+  // checklist of the class for one task this week; can add a missing student on the spot
+  async function pickMembers(sec, task, preset) {
+    let chosen = preset || null;
+    for (;;) {
+      const r = await new Promise(res => {
+        const d = $('#memberDlg'), a = weekOf(sec, st.week);
+        const mine = new Set(chosen || a[task.id] || []);
+        const where = sid => data(sec).tasks.find(t => t.id !== task.id && (a[t.id] || []).includes(sid));
+        const ids = roster(sec);
+        // students without a group first, then the rest
+        ids.sort((x, y) => (!!where(x) - !!where(y)) || nameOf(sec, x).localeCompare(nameOf(sec, y)));
+        $('#mbTitle').textContent = task.name;
+        const count = () => { $('#mbCount').textContent = `${$('#mbList').querySelectorAll('input:checked').length} selected` + (task.size ? `, group size ${task.size}` : ''); };
+        $('#mbList').innerHTML = ids.map(sid => {
+          const other = where(sid);
+          return `<label class="mb"><input type="checkbox" value="${sid}" ${mine.has(sid) ? 'checked' : ''}>
+            <span>${esc(nameOf(sec, sid))}</span>${other ? `<small>now in ${esc(other.name)}</small>` : '<small class="free">no group</small>'}</label>`;
+        }).join('') || '<p class="muted small">No students in this class yet.</p>';
+        $('#mbList').onchange = count; count();
+        d.returnValue = '';
+        d.onclose = () => res({ v: d.returnValue, ids: [...$('#mbList').querySelectorAll('input:checked')].map(i => i.value) });
+        d.showModal();
+      });
+      if (r.v === 'add') {
+        const sid = await addStudent(sec);
+        chosen = sid ? [...r.ids, sid] : r.ids;
+        continue;
+      }
+      return r.v === 'ok' ? r.ids : null;
+    }
+  }
+  function assign(sec, taskId, ids) {
+    const a = weekOf(sec, st.week);
+    for (const k in a) if (k !== taskId) a[k] = a[k].filter(x => !ids.includes(x));
+    a[taskId] = ids;
+  }
+  function moveTo(sec, sid, taskId) {
+    const a = weekOf(sec, st.week);
+    for (const k in a) a[k] = a[k].filter(x => x !== sid);
+    if (taskId) (a[taskId] = a[taskId] || []).push(sid);
+  }
+  // a new week starts with the groups of the latest earlier week that has any
+  function carryOver(sec) {
+    const cl = data(sec), here = cl.weeks[st.week];
+    if (here && Object.values(here).some(l => l.length)) return null;
+    if (st.week < mondayOf(todayStr())) return null;          // leave past weeks alone
+    const prev = Object.keys(cl.weeks).filter(w => w < st.week && Object.values(cl.weeks[w]).some(l => l.length)).sort().pop();
+    if (!prev) return null;
+    const inClass = new Set(roster(sec)), a = {};
+    cl.tasks.forEach(t => a[t.id] = (cl.weeks[prev][t.id] || []).filter(id => inClass.has(id)));
+    cl.weeks[st.week] = a; save();
+    return prev;
   }
 
   async function adjustFlow(sec, sid, date) {
@@ -219,28 +257,29 @@ const Clean = (() => {
     const cl = data(sec);
     if (!cl.tasks.length) return `<p class="empty-note">No cleaning tasks yet.<br>Add your tasks and their points first.</p>
       <button class="btn primary wide" data-act="cl-sub" data-k="tasks">Set up tasks</button>`;
+    const carried = carryOver(sec);
     const a = cl.weeks[st.week] || {};
     const assigned = new Set(Object.values(a).flat());
     const free = roster(sec).filter(sid => !assigned.has(sid));
     const days = weekDays(st.week), t = todayStr();
     const chips = days.map((d, k) => `<button class="day${d === st.day ? ' on' : ''}${d === t ? ' is-today' : ''}" data-act="cl-day" data-d="${d}">
       <span>${DOW[k]}</span><b>${toDate(d).getDate()}</b></button>`).join('');
-    const want = targets(sec), off = Object.values(a).some(l => l.length) && mismatches(sec);
+    const E = st.edit;
     const cards = cl.tasks.map(task => {
-      const mem = (a[task.id] || []);
-      const bad = Object.values(a).some(l => l.length) && mem.length !== want[task.id];
+      const mem = (a[task.id] || []).slice().sort((x, y) => nameOf(sec, x).localeCompare(nameOf(sec, y)));
       const done = mem.filter(sid => taskEntry(sec, sid, st.day)).length;
       return `<section class="task">
         <div class="task-top"><h3>${esc(task.name)}</h3><span class="pts">${task.pts} pts</span></div>
-        <div class="size${bad ? ' bad' : ''}">${mem.length} of ${want[task.id]} members${task.size ? '' : ' (shares the rest)'}</div>
+        <div class="size">${mem.length} member${mem.length === 1 ? '' : 's'}${task.size && mem.length !== task.size ? ` (group size ${task.size})` : ''}</div>
         <div class="chips">${mem.map(sid => {
+          if (E) return `<button class="chip movable" data-act="cl-move" data-sid="${sid}">${esc(shortName(nameOf(sec, sid)))}${ic('move')}</button>`;
           const e = taskEntry(sec, sid, st.day), p = dayPoints(sec, sid, st.day);
           return `<button class="chip${e ? ' done' : ''}" data-act="cl-chip" data-sid="${sid}">${esc(shortName(nameOf(sec, sid)))}${e ? `<em>${p > 0 ? '+' : ''}${p}</em>` : ''}</button>`;
-        }).join('') || '<span class="muted small">No one yet</span>'}</div>
+        }).join('') || '<span class="muted small">No one yet. Tap Choose members.</span>'}</div>
         <div class="task-foot">
-          <span class="muted small">${mem.length ? `${done} of ${mem.length} done` : ''}</span>
-          <span>${mem.length && done < mem.length ? `<button class="link" data-act="cl-all" data-t="${task.id}">${ic('checks')}Give all</button>` : ''}
-          <button class="link" data-act="cl-members" data-t="${task.id}">${ic('users')}Members</button></span>
+          <span class="muted small">${!E && mem.length ? `${done} of ${mem.length} done` : ''}</span>
+          <span>${!E && mem.length && done < mem.length ? `<button class="link" data-act="cl-all" data-t="${task.id}">${ic('checks')}Give all</button>` : ''}
+          <button class="link" data-act="cl-members" data-t="${task.id}">${ic('users')}Choose members</button></span>
         </div>
       </section>`;
     }).join('');
@@ -252,10 +291,16 @@ const Clean = (() => {
         <button class="icon-btn" data-act="cl-wk" data-n="7" aria-label="Next week">›</button>
       </div>
       <div class="days">${chips}</div>
-      ${off ? `<div class="warnbox"><span>Some groups don't match the sizes in Tasks.</span><button class="btn primary" data-act="cl-balance">${ic('users')}Fix group sizes</button></div>` : ''}
-      <p class="muted small hint">Tap a name to give points for ${esc(prettyDate(st.day))}. Tap again to adjust or remove.</p>
+      ${carried ? `<p class="note">Groups carried over from the week of ${esc(shortDate(carried))}. Change them anytime.</p>` : ''}
+      <div class="edit-bar">
+        <p class="muted small">${E ? 'Tap a name to move it to another group, or tap Choose members.' : `Tap a name to give points for ${esc(prettyDate(st.day))}.`}</p>
+        <button class="btn${E ? ' primary' : ''}" data-act="cl-editmode">${ic(E ? 'check' : 'edit')}${E ? 'Done' : 'Arrange groups'}</button>
+      </div>
       ${cards}
-      ${free.length ? `<p class="muted small"><b>Not in a group:</b> ${free.map(sid => esc(shortName(nameOf(sec, sid)))).join(', ')}</p>` : ''}
+      ${free.length ? `<section class="task free-box"><div class="task-top"><h3>Not in a group</h3><span class="muted small">${free.length}</span></div>
+        <div class="chips">${free.map(sid => `<button class="chip movable" data-act="cl-move" data-sid="${sid}">${esc(shortName(nameOf(sec, sid)))}${ic('move')}</button>`).join('')}</div>
+        <p class="muted small" style="margin:6px 0 0">Tap a name to put them in a group.</p></section>` : ''}
+      <button class="btn wide" data-act="cl-addstu" style="margin-top:4px">${ic('plus')}Add a student</button>
       <div class="row wrap">
         <button class="btn" data-act="cl-shuffle">${ic('shuffle')}Shuffle groups</button>
         <button class="btn" data-act="cl-rotate">${ic('rotate')}Rotate from last week</button>
@@ -331,10 +376,29 @@ const Clean = (() => {
       case 'cl-members': {
         const task = cl.tasks.find(t => t.id === b.dataset.t);
         const ids = await pickMembers(sec, task);
-        if (!ids) return;
-        const a = weekOf(sec, st.week);
-        for (const k in a) if (k !== task.id) a[k] = a[k].filter(x => !ids.includes(x));
-        a[task.id] = ids; save(); return render_();
+        if (!ids) return render_();
+        assign(sec, task.id, ids); save(); return render_();
+      }
+      case 'cl-editmode': st.edit = !st.edit; return render_();
+      case 'cl-move': {
+        const sid = b.dataset.sid, a = weekOf(sec, st.week);
+        const now = cl.tasks.find(t => (a[t.id] || []).includes(sid));
+        const v = await choose(nameOf(sec, sid), now ? `Now in ${esc(now.name)}. Move to:` : 'Put in:',
+          cl.tasks.filter(t => t !== now).map(t => ({ label: `${t.name} (${(a[t.id] || []).length})`, value: t.id, cls: 'span' }))
+            .concat(now ? [{ label: 'Remove from group', value: '-', cls: 'span neg' }] : []));
+        if (v === null) return;
+        moveTo(sec, sid, v === '-' ? null : v); save(); return render_();
+      }
+      case 'cl-addstu': {
+        const sid = await addStudent(sec);
+        if (!sid) return render_();
+        if (cl.tasks.length) {
+          const a = weekOf(sec, st.week);
+          const v = await choose(nameOf(sec, sid), 'Which cleaning group this week?',
+            cl.tasks.map(t => ({ label: `${t.name} (${(a[t.id] || []).length})`, value: t.id, cls: 'span' })).concat([{ label: 'Decide later', value: '-', cls: 'span' }]));
+          if (v && v !== '-') { moveTo(sec, sid, v); save(); }
+        }
+        return render_();
       }
       case 'cl-shuffle': {
         const a = cl.weeks[st.week];
@@ -367,7 +431,14 @@ const Clean = (() => {
           cl.tasks = cl.tasks.filter(x => x.id !== t.id);
           for (const w of Object.values(cl.weeks)) delete w[t.id];
         } else if (t) Object.assign(t, r);
-        else cl.tasks.push({ id: uid(), ...r });
+        else {
+          const task = { id: uid(), ...r };
+          cl.tasks.push(task); save();
+          // pick this week's members right away
+          const ids = await pickMembers(sec, task);
+          if (ids) { assign(sec, task.id, ids); toast(`${ids.length} added to ${task.name} for this week`); }
+          st.sub = 'week';
+        }
         save(); return render_();
       }
       case 'cl-print': return printCards(sec);
@@ -575,5 +646,5 @@ const Clean = (() => {
     return { open, close, handle };
   })();
 
-  return { render, click, setRender: f => render_hook = f, qrCanvas, payload, Scanner, award, mondayOf, _st: st };
+  return { choose, render, click, setRender: f => render_hook = f, qrCanvas, payload, Scanner, award, mondayOf, _st: st };
 })();
